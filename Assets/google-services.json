@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "205975618862",
+    "firebase_url": "https://explodingkittens-80878-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "explodingkittens-80878",
+    "storage_bucket": "explodingkittens-80878.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:205975618862:android:9ec10126cfa933fcd866bf",
+        "android_client_info": {
+          "package_name": "com.UIT.ExplodingKittens"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfsDmvihaUfPdhaVbfkYk6kbix1khZiAc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
