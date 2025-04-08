@@ -547,7 +547,7 @@ GameObject:
   - component: {fileID: 452441127}
   - component: {fileID: 452441126}
   m_Layer: 5
-  m_Name: Text (TMP)
+  m_Name: Text
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -978,8 +978,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 4033355307889638888, guid: 6048350a48795df4f8b25d39e1b49324, type: 3}
-  m_Type: 0
+  m_Sprite: {fileID: 4211293783942383924, guid: a64f98d7a00501442ae40845562f1c20, type: 3}
+  m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -1054,8 +1054,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -168421969075237668, guid: 3a09ce8a719b5db478eb33b3a863403c, type: 3}
-  m_Type: 0
+  m_Sprite: {fileID: 4211293783942383924, guid: a64f98d7a00501442ae40845562f1c20, type: 3}
+  m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -1748,7 +1748,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -574109073278889394, guid: 70f48bd773ae9b645b963e65762d6c08, type: 3}
+  m_Sprite: {fileID: -574109073278889394, guid: 54f2c7423c7228644ba724a55f1fc089, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -2410,8 +2410,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -168421969075237668, guid: 3a09ce8a719b5db478eb33b3a863403c, type: 3}
-  m_Type: 0
+  m_Sprite: {fileID: 4211293783942383924, guid: a64f98d7a00501442ae40845562f1c20, type: 3}
+  m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -2485,7 +2485,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 497600754102043572, guid: 3a598ac2e37bf4b479dee53e3c9e6454, type: 3}
+  m_Sprite: {fileID: 497600754102043572, guid: 620cf88f66c50194a81652e633480698, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -2512,9 +2512,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2074742834}
-  - component: {fileID: 2074742837}
   - component: {fileID: 2074742836}
   - component: {fileID: 2074742835}
+  - component: {fileID: 2074742837}
   m_Layer: 5
   m_Name: PlayZone
   m_TagString: PlayZone
