@@ -15,7 +15,7 @@ public class FirebaseLoginManager : MonoBehaviour
 
     public Button buttonRegister;
 
-    //Đăng nhập tài khoản
+    // Đăng nhập tài khoản
     [Header(header: "Login Account")]
     public InputField idLoginEmail;
     public InputField idLoginPassword;
@@ -90,20 +90,22 @@ public class FirebaseLoginManager : MonoBehaviour
 
             // Chuyển cảnh vào game
             SceneManager.LoadScene(sceneName: "Main Menu");
-
         });
     }
+
     public void MoveToRegister()
     {
         loginForm.SetActive(false);
         registerForm.SetActive(true);
     }
+
     public void MoveToLogin()
     {
         loginForm.SetActive(true);
         registerForm.SetActive(false);
     }
-    public void MoveToForgotPassword()  
+
+    public void MoveToForgotPassword()
     {
         loginForm.SetActive(false);
         registerForm.SetActive(false);
