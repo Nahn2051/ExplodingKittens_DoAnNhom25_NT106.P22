@@ -401,6 +401,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1293299617352885840}
   - component: {fileID: 5257454960820286870}
+  - component: {fileID: 5410234362483510131}
+  - component: {fileID: 5624686959575537910}
   m_Layer: 5
   m_Name: PLayerAvatar
   m_TagString: Untagged
@@ -437,3 +439,35 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8209006278871891395}
   m_CullTransparentMesh: 1
+--- !u!114 &5410234362483510131
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8209006278871891395}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e973b82f512ddc5408853f1bd94c71a8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  playerName: {fileID: 5770745447636813791}
+  playerImage: {fileID: 970655377093385135}
+--- !u!114 &5624686959575537910
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8209006278871891395}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  SortKey: 732518117
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours: []
+  ForceRemoteRenderTimeframe: 0
