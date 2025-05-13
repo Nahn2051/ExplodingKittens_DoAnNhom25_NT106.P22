@@ -1,14 +1,13 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using Fusion;
+using Photon.Pun;
 using UnityEngine;
-using static Unity.Collections.Unicode;
 
-public class NetworkRunnerScript : MonoBehaviour
+public class NetworkRunnerScript : MonoBehaviourPunCallbacks
 {
     private void Awake()
     {
-        if (FindObjectsOfType<NetworkRunner>().Length > 1)
+        if (FindObjectsOfType<NetworkRunnerScript>().Length > 1)
         {
             Destroy(gameObject);
             return;

@@ -1,261 +1,382 @@
-using UnityEngine;
-using UnityEngine.UI;
-using TMPro;
-using UnityEngine.SceneManagement;
-using Fusion;
-using Fusion.Sockets;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
+using Photon.Pun;
+using Photon.Realtime;
+using TMPro;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
-public class LobbySceneManager : NetworkBehaviour, INetworkRunnerCallbacks
+public class LobbySceneManager : MonoBehaviourPunCallbacks
 {
     [Header("UI References")]
     public TMP_Text roomIdText;
-    public Button playButton;
-    public Button exitButton;
-    public Transform playerContainer;
-    public HostLeaveNotification hostLeaveNotification;
+    public Button copyRoomIdButton;
+    public Transform playerListContainer;
+    public GameObject playerItemPrefab;
+    public Button startGameButton;
+    public Button leaveButton;
     
-    [Header("Prefabs")]
-    public GameObject playerAvatarPrefab;
-    public AvatarImageManager avatarImageManager;
+    [Header("Avatar Display")]
+    public LobbyPlayerDisplay localPlayerDisplay;
     
-    // Networking
-    private NetworkRunner _runner;
-    private bool _isHost = false;
-    private Dictionary<PlayerRef, GameObject> _playerAvatars = new Dictionary<PlayerRef, GameObject>();
+    [NonSerialized]
+    private PhotonView _photonView;
+    [NonSerialized]
+    private string _roomId;
     
     private void Awake()
     {
-        _runner = FindObjectOfType<NetworkRunner>();
-        
-        if (_runner == null)
+        _photonView = GetComponent<PhotonView>();
+        if (_photonView == null)
         {
-            Debug.LogError("NetworkRunner not found in scene!");
-            return;
+            Debug.LogError("PhotonView không tìm thấy trên LobbySceneManager. Vui lòng thêm component PhotonView.");
+            _photonView = gameObject.AddComponent<PhotonView>();
         }
-        
-        // Determine if we're the host
-        _isHost = _runner.IsServer;
     }
     
     private void Start()
     {
-        // Display the Room ID
-        if (PlayerData.Instance != null)
-        {
-            roomIdText.text = "Room ID: " + PlayerData.Instance.RoomID;
-        }
-        
-        // Only host can see the play button
-        playButton.gameObject.SetActive(_isHost);
-        
-        // Setup Button Listeners
-        playButton.onClick.AddListener(OnPlayButtonClicked);
-        exitButton.onClick.AddListener(OnExitButtonClicked);
-        
-        // Register network events
-        _runner.AddCallbacks(this);
-        
-        // Spawn our player avatar (this will be called on all clients)
-        SpawnPlayerAvatar();
+        StartCoroutine(InitializeAfterConnection());
     }
     
-    private void OnPlayButtonClicked()
+    private IEnumerator InitializeAfterConnection()
     {
-        if (_isHost)
+        // Đợi cho đến khi kết nối đến phòng hoàn tất
+        float timeout = 10f;
+        float elapsed = 0f;
+        
+        while (elapsed < timeout && (!PhotonNetwork.IsConnected || PhotonNetwork.CurrentRoom == null))
         {
-            // TODO: Start the game
-            // _runner.SetActiveScene("InGame");
-            SceneManager.LoadScene("InGame");
+            Debug.Log("Đang đợi kết nối Photon hoàn tất...");
+            elapsed += 0.5f;
+            yield return new WaitForSeconds(0.5f);
+        }
+        
+        if (!PhotonNetwork.IsConnected || PhotonNetwork.CurrentRoom == null)
+        {
+            Debug.LogError("Kết nối đến phòng thất bại sau khi timeout. Quay lại màn hình chính.");
+            LeaveRoom();
+            yield break;
+        }
+        
+        // Thiết lập UI
+        SetupLobbyUI();
+        
+        // Đăng ký người chơi
+        TryRegisterPlayer();
+    }
+    
+    private void SetupLobbyUI()
+    {
+        // Setup ID phòng
+        _roomId = PhotonNetwork.CurrentRoom.Name;
+        if (roomIdText != null)
+            roomIdText.text = $"Room ID: {_roomId}";
+            
+        // Thiết lập nút copy
+        if (copyRoomIdButton != null)
+        {
+            copyRoomIdButton.onClick.AddListener(CopyRoomIdToClipboard);
+        }
+        
+        // Thiết lập các nút
+        if (startGameButton != null)
+        {
+            startGameButton.onClick.AddListener(OnStartGameClicked);
+            
+            // Hiển thị nút cho tất cả người chơi nhưng vô hiệu hóa nếu không phải host
+            startGameButton.gameObject.SetActive(true);
+            UpdateStartGameButton();
+        }
+        
+        if (leaveButton != null)
+        {
+            leaveButton.onClick.AddListener(OnLeaveClicked);
+        }
+        
+        // Hiển thị thông tin người chơi
+        UpdatePlayerAvatarDisplay();
+        
+        // Cập nhật danh sách người chơi
+        UpdatePlayerList();
+    }
+    
+    private void UpdateStartGameButton()
+    {
+        if (startGameButton != null)
+        {
+            bool isHost = PhotonNetwork.IsMasterClient;
+            bool hasEnoughPlayers = PhotonNetwork.CurrentRoom.PlayerCount >= 2;
+            
+            // Chỉ cho phép start nếu là host và có ít nhất 2 người chơi
+            startGameButton.interactable = isHost && hasEnoughPlayers;
+            
+            // Cập nhật text trên nút nếu không đủ người chơi
+            TextMeshProUGUI buttonText = startGameButton.GetComponentInChildren<TextMeshProUGUI>();
+            if (buttonText != null)
+            {
+                if (!hasEnoughPlayers && isHost)
+                {
+                    buttonText.text = "Cần ít nhất 2 người chơi";
+            }
+            else
+            {
+                    buttonText.text = "Bắt đầu";
+                }
+            }
         }
     }
     
-    private void OnExitButtonClicked()
+    private void TryRegisterPlayer()
     {
-        // If host is leaving, notify everyone and shut down the session
-        if (_isHost)
+        try
         {
-            RPC_HostLeft();
+            // Kiểm tra kết nối trước khi đăng ký
+            if (!PhotonNetwork.IsConnected)
+            {
+                Debug.LogError("Không thể đăng ký người chơi: Chưa kết nối với Photon.");
+                return;
+            }
+            
+            if (PhotonNetwork.CurrentRoom == null)
+            {
+                Debug.LogError("Không thể đăng ký người chơi: Không có phòng nào đang hoạt động.");
+            return;
         }
         
-        // Leave the network session
-        LeaveSession();
+            // Đăng ký thông tin người chơi
+            Player player = PhotonNetwork.LocalPlayer;
+            int avatarIndex = PlayerData.Instance != null ? PlayerData.Instance.AvatarIndex : 0;
+            
+            // Sử dụng CustomProperties để lưu trữ thông tin người chơi
+            ExitGames.Client.Photon.Hashtable playerProps = new ExitGames.Client.Photon.Hashtable();
+            playerProps["AvatarIndex"] = avatarIndex;
+            player.SetCustomProperties(playerProps);
+            
+            // Thông báo đến tất cả người chơi có người mới
+            if (_photonView != null && _photonView.IsMine)
+            {
+                _photonView.RPC("RPC_PlayerJoined", RpcTarget.AllBuffered);
+            }
+            
+            Debug.Log($"Đã đăng ký người chơi: {player.NickName} với Avatar: {avatarIndex}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Lỗi khi đăng ký người chơi: {e.Message}\n{e.StackTrace}");
+        }
     }
     
-    private void LeaveSession()
+    public void UpdatePlayerAvatarDisplay()
     {
-        if (_runner != null)
+        if (localPlayerDisplay != null && PlayerData.Instance != null)
         {
-            _runner.Shutdown();
+            localPlayerDisplay.SetPlayerInfo(PlayerData.Instance.PlayerName, PlayerData.Instance.AvatarIndex);
+        }
+    }
+    
+    public void UpdatePlayerList()
+    {
+        if (playerListContainer == null || playerItemPrefab == null) return;
+        
+        // Xóa danh sách hiện tại
+        foreach (Transform child in playerListContainer)
+        {
+            Destroy(child.gameObject);
         }
         
+        // Tạo lại danh sách từ tất cả người chơi trong phòng
+        foreach (Player player in PhotonNetwork.PlayerList)
+        {
+            GameObject playerItemGO = Instantiate(playerItemPrefab, playerListContainer);
+            LobbyPlayerDisplay playerDisplay = playerItemGO.GetComponent<LobbyPlayerDisplay>();
+            
+            if (playerDisplay != null)
+            {
+                int avatarIndex = 0;
+                if (player.CustomProperties.ContainsKey("AvatarIndex"))
+                    avatarIndex = (int)player.CustomProperties["AvatarIndex"];
+                
+                playerDisplay.SetPlayerInfo(player.NickName, avatarIndex);
+                
+                // Đánh dấu chủ phòng
+                if (player.IsMasterClient)
+                {
+                    playerDisplay.MarkAsHost();
+                }
+            }
+        }
+        
+        // Cập nhật trạng thái nút bắt đầu game
+        UpdateStartGameButton();
+    }
+    
+    [PunRPC]
+    private void RPC_PlayerJoined()
+    {
+        try
+        {
+            Debug.Log("RPC_PlayerJoined được gọi");
+            UpdatePlayerList();
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Lỗi trong RPC_PlayerJoined: {e.Message}\n{e.StackTrace}");
+        }
+    }
+    
+    private void OnStartGameClicked()
+    {
+        if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom.PlayerCount >= 2)
+        {
+            try
+            {
+                _photonView.RPC("RPC_StartGame", RpcTarget.All);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Lỗi khi gọi RPC_StartGame: {e.Message}");
+                // Fallback nếu RPC thất bại
+                PhotonNetwork.LoadLevel("InGame");
+            }
+        }
+        else if (PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log("Không thể bắt đầu game: Cần ít nhất 2 người chơi.");
+        }
+    }
+    
+    [PunRPC]
+    private void RPC_StartGame()
+    {
+        try
+        {
+            Debug.Log("Bắt đầu chuyển cảnh đến InGame");
+            // Tất cả người chơi đều load scene chứ không chỉ host
+            PhotonNetwork.LoadLevel("InGame");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Lỗi trong RPC_StartGame: {e.Message}\n{e.StackTrace}");
+        }
+    }
+    
+    private void OnLeaveClicked()
+    {
+        LeaveRoom();
+    }
+    
+    private void LeaveRoom()
+    {
+        StartCoroutine(LeaveRoomRoutine());
+    }
+    
+    private IEnumerator LeaveRoomRoutine()
+    {
+        if (PhotonNetwork.InRoom)
+        {
+            // Nếu là chủ phòng, thông báo cho người chơi khác
+            if (PhotonNetwork.IsMasterClient && _photonView != null)
+            {
+                try
+                {
+                    _photonView.RPC("RPC_HostLeaving", RpcTarget.Others);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Lỗi khi gọi RPC_HostLeaving: {e.Message}");
+                }
+            }
+            
+            PhotonNetwork.LeaveRoom();
+        }
+        
+        // Đợi ngắt kết nối khỏi phòng
+        while (PhotonNetwork.InRoom)
+        {
+            yield return null;
+        }
+        
+        // Chuyển về màn hình JoinScene
         SceneManager.LoadScene("JoinScene");
     }
     
-    [Rpc(RpcSources.All, RpcTargets.All)]
-    public void RPC_HostLeft()
+    [PunRPC]
+    private void RPC_HostLeaving()
     {
-        if (!_isHost) // Only non-hosts should show message and return to join scene
+        try
         {
-            Debug.Log("Host left the game!");
-            
-            // Show notification
-            if (hostLeaveNotification != null)
+            Debug.Log("Chủ phòng đã rời đi.");
+            // Hiển thị thông báo chủ phòng đã rời đi
+            HostLeaveNotification notification = FindObjectOfType<HostLeaveNotification>();
+            if (notification != null)
             {
-                hostLeaveNotification.ShowHostLeftNotification();
-                Invoke("LeaveSession", 3f); // Give time to see the notification
-            }
-            else
-            {
-                LeaveSession();
+                notification.ShowNotification();
             }
         }
-    }
-    
-    private void SpawnPlayerAvatar()
-    {
-        if (playerAvatarPrefab == null)
+        catch (Exception e)
         {
-            Debug.LogError("Player Avatar Prefab is not assigned!");
-            return;
-        }
-        
-        // Create local player avatar
-        GameObject avatarInstance = Instantiate(playerAvatarPrefab, playerContainer);
-        
-        // Get the display component
-        LobbyPlayerDisplay playerDisplay = avatarInstance.GetComponent<LobbyPlayerDisplay>();
-        
-        if (playerDisplay != null && PlayerData.Instance != null && avatarImageManager != null)
-        {
-            // Initialize with player data
-            playerDisplay.Initialize(
-                PlayerData.Instance.PlayerName,
-                avatarImageManager.SetImage(PlayerData.Instance.AvatarIndex)
-            );
-        }
-        else
-        {
-            // Fallback to directly setting components if LobbyPlayerDisplay isn't available
-            SetPlayerAvatarDisplay(avatarInstance, PlayerData.Instance.PlayerName, PlayerData.Instance.AvatarIndex);
-        }
-        
-        // Add to dictionary if we have a valid runner
-        if (_runner != null && _runner.LocalPlayer != PlayerRef.None)
-        {
-            _playerAvatars[_runner.LocalPlayer] = avatarInstance;
-            
-            // Notify others about our player
-            RPC_PlayerJoined(PlayerData.Instance.PlayerName, PlayerData.Instance.AvatarIndex);
+            Debug.LogError($"Lỗi trong RPC_HostLeaving: {e.Message}\n{e.StackTrace}");
         }
     }
     
-    [Rpc(RpcSources.All, RpcTargets.All)]
-    public void RPC_PlayerJoined(string playerName, int avatarIndex, RpcInfo info = default)
+    // Photon Callbacks
+    
+    public override void OnPlayerPropertiesUpdate(Player targetPlayer, ExitGames.Client.Photon.Hashtable changedProps)
     {
-        // Don't duplicate our own avatar
-        if (info.Source == _runner.LocalPlayer)
-            return;
-            
-        // Create avatar for the other player
-        GameObject avatarInstance = Instantiate(playerAvatarPrefab, playerContainer);
-        
-        // Get the display component
-        LobbyPlayerDisplay playerDisplay = avatarInstance.GetComponent<LobbyPlayerDisplay>();
-        
-        if (playerDisplay != null && avatarImageManager != null)
-        {
-            // Initialize with player data
-            playerDisplay.Initialize(
-                playerName,
-                avatarImageManager.SetImage(avatarIndex)
-            );
-        }
-        else
-        {
-            // Fallback to directly setting components if LobbyPlayerDisplay isn't available
-            SetPlayerAvatarDisplay(avatarInstance, playerName, avatarIndex);
-        }
-        
-        // Add to dictionary
-        _playerAvatars[info.Source] = avatarInstance;
+        // Cập nhật danh sách người chơi khi có thay đổi
+        UpdatePlayerList();
     }
     
-    // Fallback method to set player avatar display directly
-    private void SetPlayerAvatarDisplay(GameObject avatarObject, string playerName, int avatarIndex)
+    public override void OnPlayerEnteredRoom(Player newPlayer)
     {
-        // Set player name
-        TMP_Text nameText = avatarObject.GetComponentInChildren<TMP_Text>();
-        if (nameText != null)
-        {
-            nameText.text = playerName;
-        }
-        
-        // Set player avatar
-        SetAvatarImage(avatarObject, avatarIndex);
+        Debug.Log($"Người chơi {newPlayer.NickName} đã vào phòng.");
+        UpdatePlayerList();
     }
     
-    // Set the avatar image based on the index
-    private void SetAvatarImage(GameObject avatarObject, int avatarIndex)
+    public override void OnPlayerLeftRoom(Player otherPlayer)
     {
-        Image avatarImage = avatarObject.GetComponentInChildren<Image>(true);
+        Debug.Log($"Người chơi {otherPlayer.NickName} đã rời phòng.");
+        UpdatePlayerList();
         
-        if (avatarImageManager != null && avatarImage != null)
+        // Nếu chủ phòng rời đi, hiển thị thông báo
+        if (otherPlayer.IsMasterClient)
         {
-            avatarImage.sprite = avatarImageManager.SetImage(avatarIndex);
-        }
-    }
-    
-    // INetworkRunnerCallbacks implementation
-    public void OnPlayerJoined(NetworkRunner runner, PlayerRef player) { }
-    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
-    {
-        Debug.Log($"Player {player} left the game");
-        
-        // If this player is the host and we're not the host, return to join scene
-        if (runner.IsServer && player == runner.LocalPlayer && !_isHost)
-        {
-            Debug.Log("Host left the game!");
-            
-            // Show notification
-            if (hostLeaveNotification != null)
+            HostLeaveNotification notification = FindObjectOfType<HostLeaveNotification>();
+            if (notification != null)
             {
-                hostLeaveNotification.ShowHostLeftNotification();
-                Invoke("LeaveSession", 3f); // Give time to see the notification
+                notification.ShowNotification();
             }
-            else
-            {
-                LeaveSession();
-            }
-            
-            return;
-        }
-        
-        // Remove the player's avatar
-        if (_playerAvatars.TryGetValue(player, out GameObject avatar))
-        {
-            Destroy(avatar);
-            _playerAvatars.Remove(player);
         }
     }
     
-    // Implement required INetworkRunnerCallbacks methods
-    public void OnInput(NetworkRunner runner, NetworkInput input) { }
-    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
-    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
-    public void OnConnectedToServer(NetworkRunner runner) { }
-    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
-    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
-    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
-    public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
-    public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) { }
-    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
-    public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
-    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
-    public void OnSceneLoadDone(NetworkRunner runner) { }
-    public void OnSceneLoadStart(NetworkRunner runner) { }
-    public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
-    public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
-    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
+    public override void OnMasterClientSwitched(Player newMasterClient)
+    {
+        Debug.Log($"Chủ phòng mới: {newMasterClient.NickName}");
+        UpdatePlayerList();
+        
+        // Cập nhật quyền bắt đầu game
+        UpdateStartGameButton();
+    }
+    
+    public override void OnDisconnected(DisconnectCause cause)
+    {
+        Debug.LogWarning($"Ngắt kết nối khỏi Photon: {cause}");
+        SceneManager.LoadScene("JoinScene");
+    }
+    
+    public void CopyRoomIdToClipboard()
+    {
+        if (string.IsNullOrEmpty(_roomId)) return;
+        
+        GUIUtility.systemCopyBuffer = _roomId;
+        
+        // Hiển thị thông báo (tùy chọn)
+        Debug.Log($"Đã sao chép Room ID: {_roomId} vào clipboard");
+        
+        // Nếu có một UI thông báo, bạn có thể hiển thị nó ở đây
+        // ShowCopyNotification();
+    }
 }

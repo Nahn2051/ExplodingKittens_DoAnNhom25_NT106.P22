@@ -452,3 +452,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   playerNameText: {fileID: 5770745447636813791}
   playerAvatarImage: {fileID: 970655377093385135}
+  hostIndicator: {fileID: 0}
+  avatarManager: {fileID: 4540425689564568983, guid: a918c12355438b64da64df4d010c1d46, type: 3}
