@@ -1452,6 +1452,7 @@ MonoBehaviour:
   playerContainer: {fileID: 209491515}
   hostLeaveNotification: {fileID: 217717170}
   playerAvatarPrefab: {fileID: 8209006278871891395, guid: 4b826723d5f63e7488835fbcad259701, type: 3}
+  avatarImageManager: {fileID: 4540425689564568983, guid: a918c12355438b64da64df4d010c1d46, type: 3}
 --- !u!4 &5596525784762818100
 Transform:
   m_ObjectHideFlags: 0

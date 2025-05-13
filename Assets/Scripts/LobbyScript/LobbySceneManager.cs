@@ -18,17 +18,16 @@ public class LobbySceneManager : NetworkBehaviour, INetworkRunnerCallbacks
     
     [Header("Prefabs")]
     public GameObject playerAvatarPrefab;
+    public AvatarImageManager avatarImageManager;
     
     // Networking
     private NetworkRunner _runner;
     private bool _isHost = false;
     private Dictionary<PlayerRef, GameObject> _playerAvatars = new Dictionary<PlayerRef, GameObject>();
-    private AvatarImageManager _avatarImageManager;
     
     private void Awake()
     {
         _runner = FindObjectOfType<NetworkRunner>();
-        _avatarImageManager = FindObjectOfType<AvatarImageManager>();
         
         if (_runner == null)
         {
@@ -128,12 +127,12 @@ public class LobbySceneManager : NetworkBehaviour, INetworkRunnerCallbacks
         // Get the display component
         LobbyPlayerDisplay playerDisplay = avatarInstance.GetComponent<LobbyPlayerDisplay>();
         
-        if (playerDisplay != null && PlayerData.Instance != null && _avatarImageManager != null)
+        if (playerDisplay != null && PlayerData.Instance != null && avatarImageManager != null)
         {
             // Initialize with player data
             playerDisplay.Initialize(
                 PlayerData.Instance.PlayerName,
-                _avatarImageManager.SetImage(PlayerData.Instance.AvatarIndex)
+                avatarImageManager.SetImage(PlayerData.Instance.AvatarIndex)
             );
         }
         else
@@ -165,12 +164,12 @@ public class LobbySceneManager : NetworkBehaviour, INetworkRunnerCallbacks
         // Get the display component
         LobbyPlayerDisplay playerDisplay = avatarInstance.GetComponent<LobbyPlayerDisplay>();
         
-        if (playerDisplay != null && _avatarImageManager != null)
+        if (playerDisplay != null && avatarImageManager != null)
         {
             // Initialize with player data
             playerDisplay.Initialize(
                 playerName,
-                _avatarImageManager.SetImage(avatarIndex)
+                avatarImageManager.SetImage(avatarIndex)
             );
         }
         else
@@ -202,9 +201,9 @@ public class LobbySceneManager : NetworkBehaviour, INetworkRunnerCallbacks
     {
         Image avatarImage = avatarObject.GetComponentInChildren<Image>(true);
         
-        if (_avatarImageManager != null && avatarImage != null)
+        if (avatarImageManager != null && avatarImage != null)
         {
-            avatarImage.sprite = _avatarImageManager.SetImage(avatarIndex);
+            avatarImage.sprite = avatarImageManager.SetImage(avatarIndex);
         }
     }
     
