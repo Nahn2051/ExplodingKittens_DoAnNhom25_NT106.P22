@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<<< HEAD:Assets/TechnoGami/2d UI button/ExmpleScene/TechnoGami1.unity.meta
 guid: d3879a4453c2542459b6b1c5173c90db
+========
+guid: 2d20848059087524c86d58b2906d679b
+>>>>>>>> main:Assets/Photon/Fusion/Assemblies/Debug/Fusion.Log.dll.debug.meta
 DefaultImporter:
   externalObjects: {}
   userData: 

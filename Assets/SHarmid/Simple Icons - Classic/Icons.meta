@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<<< HEAD:Assets/SHarmid/Simple Icons - Classic/Icons.meta
 guid: b51ff194e5e4f1345bb7a2a73841e90f
+========
+guid: 5afeb015ca31e1b428b68072652268b7
+>>>>>>>> main:Assets/Prefabs/PLayer.meta
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}
