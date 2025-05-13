@@ -28,9 +28,11 @@ public class FirebaseLoginManager : MonoBehaviour
     [Header(header: "Switch")]
     public Button buttonMovetoRegister;
     public Button buttonMovetoLogin;
+    public Button buttonForgotPassword;
 
     public GameObject loginForm;
     public GameObject registerForm;
+    public GameObject ForgotPasswordForm;
 
     private void Start()
     {
@@ -39,6 +41,7 @@ public class FirebaseLoginManager : MonoBehaviour
         buttonLogin.onClick.AddListener(LoginAccount);
         buttonMovetoRegister.onClick.AddListener(MoveToRegister);
         buttonMovetoLogin.onClick.AddListener(MoveToLogin);
+        buttonForgotPassword.onClick.AddListener(MoveToForgotPassword);
     }
 
     public void RegisterAccount()
@@ -52,14 +55,9 @@ public class FirebaseLoginManager : MonoBehaviour
         }
         auth.CreateUserWithEmailAndPasswordAsync(email, password).ContinueWithOnMainThread(task =>
         {
-            if (task.IsCanceled)
+            if (task.IsCanceled || task.IsFaulted)
             {
-                Debug.Log("Create user was canceled.");
-                return;
-            }
-            if (task.IsFaulted)
-            {
-                Debug.Log(message: "Create user encountered an error");
+                Debug.Log("Create user failed.");
                 return;
             }
             Debug.Log(message: "Firebase user created successfully");
@@ -104,5 +102,11 @@ public class FirebaseLoginManager : MonoBehaviour
     {
         loginForm.SetActive(true);
         registerForm.SetActive(false);
+    }
+    public void MoveToForgotPassword()  
+    {
+        loginForm.SetActive(false);
+        registerForm.SetActive(false);
+        ForgotPasswordForm.SetActive(true);
     }
 }
