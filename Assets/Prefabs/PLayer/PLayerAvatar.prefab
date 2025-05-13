@@ -404,7 +404,7 @@ GameObject:
   - component: {fileID: 5410234362483510131}
   - component: {fileID: 5624686959575537910}
   m_Layer: 5
-  m_Name: PLayerAvatar
+  m_Name: PlayerAvatar
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

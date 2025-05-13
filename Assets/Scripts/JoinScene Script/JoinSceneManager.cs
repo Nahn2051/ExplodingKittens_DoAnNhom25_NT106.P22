@@ -22,7 +22,13 @@ public class JoinSceneManager : MonoBehaviour
 
     void Awake()
     {
-        CheckAndLoadNetworkRunner();
+        if(FindObjectOfType<NetworkRunner>())
+        {
+            runner = FindObjectOfType<NetworkRunner>();
+            runner.Shutdown();
+        }
+        else 
+            CheckAndLoadNetworkRunner();
     }
     private void CheckAndLoadNetworkRunner()
     {
@@ -81,14 +87,15 @@ public class JoinSceneManager : MonoBehaviour
         {
             GameMode = GameMode.Host,
             SessionName = roomID,
-            SceneManager = runner.GetComponent<NetworkSceneManagerDefault>() ?? runner.gameObject.AddComponent<NetworkSceneManagerDefault>()
+            SceneManager = runner.GetComponent<NetworkSceneManagerDefault>() ?? runner.gameObject.AddComponent<NetworkSceneManagerDefault>(),
+            PlayerCount = 5
         };
 
         var result = await runner.StartGame(startArgs);
 
         if (result.Ok)
         {
-            SceneManager.LoadScene("Lobby");
+            SceneManager.LoadScene("LobbyScene");
         }
         else
         {
@@ -124,14 +131,15 @@ public class JoinSceneManager : MonoBehaviour
         {
             GameMode = GameMode.Client,
             SessionName = roomID,
-            SceneManager = runner.GetComponent<NetworkSceneManagerDefault>() ?? runner.gameObject.AddComponent<NetworkSceneManagerDefault>()
+            SceneManager = runner.GetComponent<NetworkSceneManagerDefault>() ?? runner.gameObject.AddComponent<NetworkSceneManagerDefault>(),
+            PlayerCount = 5
         };
 
         var result = await runner.StartGame(startArgs);
 
         if (result.Ok)
         {
-            SceneManager.LoadScene("Lobby");
+            SceneManager.LoadScene("LobbyScene");
         }
         else
         {
