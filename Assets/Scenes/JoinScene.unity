@@ -456,6 +456,7 @@ MonoBehaviour:
   noRoomFoundText: {fileID: 240454230}
   exitButton: {fileID: 1067116121}
   runner: {fileID: 0}
+  lobbyManagerPrefab: {fileID: 1452959774322472837, guid: ae712e8efe3e93d4fb3b6682e3a07f53, type: 3}
 --- !u!1 &240454228
 GameObject:
   m_ObjectHideFlags: 0
