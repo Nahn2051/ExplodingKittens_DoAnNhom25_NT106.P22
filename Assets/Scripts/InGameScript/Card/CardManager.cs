@@ -229,9 +229,25 @@ public class CardManager : MonoBehaviour
     // Lưu ý: Đánh bài không tự động chuyển lượt - chỉ có rút bài mới chuyển lượt
     public void PlayCard(Card card, int playerActorNumber)
     {
-        // Kiểm tra xem có phải lượt của người chơi không
-        if (GameManager.Instance != null && GameManager.Instance.IsLocalPlayerTurn())
+        Debug.Log($"Đang thử chơi bài {card.data.cardName} bởi người chơi {playerActorNumber}");
+        
+        // Kiểm tra null
+        if (GameManager.Instance == null)
         {
+            Debug.LogError("GameManager.Instance là null khi thử chơi bài!");
+            return;
+        }
+        
+        // Ghi log lượt chơi hiện tại để debug
+        int currentTurnIndex = GameManager.Instance.GetCurrentTurnIndex();
+        int localPlayerIndex = PhotonNetwork.LocalPlayer.ActorNumber;
+        Debug.Log($"Lượt hiện tại: {currentTurnIndex}, Người chơi local: {localPlayerIndex}, IsLocalPlayerTurn: {GameManager.Instance.IsLocalPlayerTurn()}");
+        
+        // Kiểm tra xem có phải lượt của người chơi không
+        if (GameManager.Instance.IsLocalPlayerTurn())
+        {
+            Debug.Log($"Người chơi {playerActorNumber} đang chơi thẻ {card.data.cardName}");
+            
             // Gửi RPC để tất cả người chơi đều thấy thẻ bài được chơi
             photonView.RPC("RPC_PlayCard", RpcTarget.All, 
                 card.data.cardName, 
@@ -242,7 +258,21 @@ public class CardManager : MonoBehaviour
             // Gọi CardEffectManager để xử lý hiệu ứng
             if (CardEffectManager.Instance != null)
             {
-                CardEffectManager.Instance.ActivateCardEffect(card.data.effect, 0);
+                CardEffectManager.Instance.ActivateCardEffect(card.data.effect, playerActorNumber);
+            }
+            else
+            {
+                Debug.LogWarning("CardEffectManager.Instance là null khi thử kích hoạt hiệu ứng bài!");
+            }
+            
+            // Xóa thẻ bài khỏi tay người chơi
+            if (cardHolder != null)
+            {
+                cardHolder.RemoveCard(card);
+            }
+            else
+            {
+                Debug.LogWarning("cardHolder là null khi thử xóa thẻ bài!");
             }
             
             // Cập nhật số lượng thẻ bài
@@ -253,7 +283,7 @@ public class CardManager : MonoBehaviour
         }
         else
         {
-            Debug.Log("Không thể chơi bài - chưa đến lượt của bạn!");
+            Debug.LogWarning($"Không thể chơi bài - chưa đến lượt của bạn! Lượt hiện tại: {currentTurnIndex}, Người chơi local: {localPlayerIndex}");
         }
     }
     

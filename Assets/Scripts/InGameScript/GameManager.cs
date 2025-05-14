@@ -27,6 +27,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     [SerializeField] private List<Player> playerList = new List<Player>();
     private int localPlayerIndex = -1;
     private List<PlayerSlot> playerSlots = new List<PlayerSlot>();
+    private int lastPlayerDrawCardIndex = -1;
     
     private void Awake()
     {
@@ -58,7 +59,23 @@ public class GameManager : MonoBehaviourPunCallbacks
     
     public bool IsLocalPlayerTurn()
     {
-        return currentTurnIndex == localPlayerIndex;
+        // Kiểm tra xem lượt hiện tại có phải là của player local hay không
+        if (currentTurnIndex < 0 || currentTurnIndex >= playerList.Count)
+        {
+            Debug.LogError($"currentTurnIndex ({currentTurnIndex}) nằm ngoài phạm vi playerList ({playerList.Count})!");
+            return false;
+        }
+        
+        // Lấy ActorNumber của người chơi đang có lượt
+        int currentPlayerActorNumber = playerList[currentTurnIndex].ActorNumber;
+        
+        // So sánh với ActorNumber của local player
+        bool result = (currentPlayerActorNumber == PhotonNetwork.LocalPlayer.ActorNumber);
+        
+        // Log để debug
+        Debug.Log($"IsLocalPlayerTurn: currTurnIdx={currentTurnIndex}, currPlayerActorNum={currentPlayerActorNumber}, localPlayerActorNum={PhotonNetwork.LocalPlayer.ActorNumber}, result={result}");
+        
+        return result;
     }
     
     private void InitializeGame()
@@ -154,15 +171,86 @@ public class GameManager : MonoBehaviourPunCallbacks
         }
     }
     
+    public void OnDrawCardButtonClicked()
+    {
+        // Kiểm tra có phải lượt của người chơi hiện tại không
+        if (currentTurnIndex == localPlayerIndex)
+        {
+            Debug.Log("Đang rút bài và chuyển lượt...");
+            
+            // Vô hiệu hóa nút rút bài ngay lập tức để tránh nhấn nhiều lần
+            if (drawCardButtonComponent != null)
+            {
+                drawCardButtonComponent.interactable = false;
+            }
+            
+            // Rút bài thông qua CardManager
+            if (CardManager.Instance != null)
+            {
+                // Yêu cầu host xử lý việc rút bài
+                CardManager.Instance.PhotonView.RPC("RPC_RequestDrawCard", RpcTarget.MasterClient, PhotonNetwork.LocalPlayer.ActorNumber);
+                
+                // Không chuyển lượt ngay lập tức - thay vào đó, bắt đầu một coroutine để đợi một khoảng thời gian
+                // Chỉ người chơi hiện tại mới được phép chuyển lượt
+                StartCoroutine(SwitchTurnAfterDelay(1.0f));
+            }
+        }
+        else
+        {
+            Debug.LogWarning("Không phải lượt của bạn! Lượt hiện tại: " + currentTurnIndex + ", lượt của bạn: " + localPlayerIndex);
+        }
+    }
+    
+    private IEnumerator SwitchTurnAfterDelay(float delay)
+    {
+        // Đợi một khoảng thời gian
+        yield return new WaitForSeconds(delay);
+        
+        // Chỉ người chơi hiện tại mới được phép chuyển lượt
+        if (currentTurnIndex == localPlayerIndex)
+        {
+            // Chuyển lượt sang người tiếp theo
+            int nextPlayerIndex = (currentTurnIndex + 1) % playerList.Count;
+            Debug.Log("Chuyển lượt từ " + currentTurnIndex + " sang " + nextPlayerIndex);
+            
+            // Nếu là host, bắt đầu lượt mới cho tất cả mọi người
+            if (PhotonNetwork.IsMasterClient)
+            {
+                StartTurn(nextPlayerIndex);
+            }
+            else
+            {
+                // Người chơi không phải host yêu cầu host chuyển lượt
+                photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex);
+            }
+        }
+    }
+    
+    [PunRPC]
+    private void RPC_RequestStartTurn(int nextPlayerIndex)
+    {
+        // Chỉ host xử lý yêu cầu chuyển lượt
+        if (PhotonNetwork.IsMasterClient)
+        {
+            StartTurn(nextPlayerIndex);
+        }
+    }
+    
     public void StartTurn(int playerIndex)
     {
+        // Cập nhật lượt hiện tại trước khi gửi RPC
         currentTurnIndex = playerIndex;
+        
+        // Gửi RPC để đồng bộ lượt trên tất cả client
         photonView.RPC("RPC_StartTurn", RpcTarget.All, playerIndex);
     }
     
     [PunRPC]
     private void RPC_StartTurn(int playerIndex)
     {
+        // Cập nhật biến lượt hiện tại
+        currentTurnIndex = playerIndex;
+        
         // Lấy thông tin người chơi đang có lượt
         string activePlayerName = "Unknown";
         if (playerIndex >= 0 && playerIndex < playerList.Count)
@@ -186,6 +274,13 @@ public class GameManager : MonoBehaviourPunCallbacks
         {
             Debug.Log("Đến lượt của bạn! Hãy rút một lá bài.");
             // Hiển thị thông báo "Đến lượt của bạn!" - bạn có thể thêm code UI thông báo ở đây
+            
+            // Kiểm tra nếu đây là lượt đầu tiên (chưa ai từng rút bài)
+            if (lastPlayerDrawCardIndex == -1)
+            {
+                // Hiển thị thông báo đặc biệt cho lượt đầu tiên
+                Debug.Log("Lượt đầu tiên của trò chơi! Hãy rút một lá bài để bắt đầu.");
+            }
         }
         else
         {
@@ -225,29 +320,19 @@ public class GameManager : MonoBehaviourPunCallbacks
         }
     }
     
-    public void OnDrawCardButtonClicked()
-    {
-        // Kiểm tra có phải lượt của người chơi hiện tại không
-        if (currentTurnIndex == localPlayerIndex)
-        {
-            Debug.Log("Đang rút bài và chuyển lượt...");
-            
-            // Rút bài thông qua CardManager
-            if (CardManager.Instance != null)
-            {
-                // Yêu cầu host xử lý việc rút bài
-                CardManager.Instance.PhotonView.RPC("RPC_RequestDrawCard", RpcTarget.MasterClient, PhotonNetwork.LocalPlayer.ActorNumber);
-            }
-            
-            // Chuyển lượt sang người tiếp theo
-            int nextPlayerIndex = (currentTurnIndex + 1) % playerList.Count;
-            StartTurn(nextPlayerIndex);
-        }
-    }
-    
     [PunRPC]
     private void RPC_PlayerDrawCard(int playerActorNumber)
     {
+        // Cập nhật người chơi cuối cùng rút bài
+        for (int i = 0; i < playerList.Count; i++)
+        {
+            if (playerList[i].ActorNumber == playerActorNumber)
+            {
+                lastPlayerDrawCardIndex = i;
+                break;
+            }
+        }
+        
         // Chỉ người chơi đang thực hiện action mới rút bài
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerActorNumber)
         {

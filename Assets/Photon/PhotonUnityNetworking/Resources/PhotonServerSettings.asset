@@ -55,6 +55,7 @@ MonoBehaviour:
   - RPC_UpdateDeckCount
   - RPC_UpdatePlayerCardCount
   - RPC_ReceiveInitialCard
+  - RPC_RequestStartTurn
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1
