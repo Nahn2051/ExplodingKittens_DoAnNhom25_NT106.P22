@@ -23,10 +23,23 @@ public class CardHolder : MonoBehaviour
 
     public void DrawCard(GameObject cardPrefab, CardData data)
     {
+        if (cardPrefab == null)
+        {
+            Debug.LogError("cardPrefab is null!");
+            return;
+        }
+
+        if (data == null || data.sprite == null)
+        {
+            Debug.LogError("Card data or sprite is null!");
+            return;
+        }
+        
         if (Cards.Count <= 6 && Cards.Count != 0)
         {
             Rect.sizeDelta = new Vector2(Rect.sizeDelta.x + 204, Rect.sizeDelta.y);
         }
+        
         GameObject cardSlotObj = Instantiate(cardPrefab, transform);
         Card cardComponent = cardSlotObj.GetComponentInChildren<Card>();
         if (cardComponent == null)
@@ -38,8 +51,32 @@ public class CardHolder : MonoBehaviour
         cardComponent.Setup(data);
         cardSlotObj.transform.SetParent(transform, false);
         Cards.Add(cardComponent);
+        
+        cardSlotObj.transform.localPosition = Vector3.zero;
+        cardSlotObj.transform.localScale = Vector3.one;
+        
         RegisterCardEvents(cardComponent);
+        
+        Debug.Log($"Thêm thẻ bài '{data.cardName}' vào tay người chơi. Số thẻ hiện có: {Cards.Count}");
+        
+        ArrangeCards();
     }
+    
+    private void ArrangeCards()
+    {
+        if (Cards.Count == 0) return;
+        
+        float spacing = 100f;
+        float offset = (Cards.Count - 1) * spacing / 2f;
+        
+        for (int i = 0; i < Cards.Count; i++)
+        {
+            Card card = Cards[i];
+            Vector3 position = new Vector3(i * spacing - offset, 0, 0);
+            card.transform.parent.localPosition = position;
+        }
+    }
+
     private void RegisterCardEvents(Card card)
     {
         card.PointerEnterEvent.AddListener(CardPointerEnter);
@@ -49,12 +86,20 @@ public class CardHolder : MonoBehaviour
     }
     public void RemoveCard(Card card)
     {
+        if (!Cards.Contains(card)) return;
+        
         Cards.Remove(card);
         Destroy(card.transform.parent.gameObject);
+        
         if (Cards.Count <= 6 && Cards.Count != 0)
         {
             Rect.sizeDelta = new Vector2(Rect.sizeDelta.x - 204, Rect.sizeDelta.y);
         }
+        
+        // Sắp xếp lại các thẻ bài sau khi xóa
+        ArrangeCards();
+        
+        Debug.Log($"Đã xóa thẻ bài. Số thẻ còn lại: {Cards.Count}");
     }
     private void BeginDrag(Card card)
     {

@@ -28,6 +28,7 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
     [HideInInspector] public bool isHovering = false;
     [HideInInspector] public bool isDragging = false;
     [HideInInspector] public bool wasDragged = false;
+    [HideInInspector] public bool isPlayed = false;
 
     [Header("Events")]
     [HideInInspector] public UnityEvent<Card> PointerEnterEvent;
@@ -82,6 +83,8 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
 
     public void OnBeginDrag(PointerEventData eventData)
     {
+        if (isPlayed) return;
+
         BeginDragEvent?.Invoke(this);
         Vector2 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         offset = mousePosition - (Vector2)transform.position;
@@ -91,10 +94,15 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
         imageComponent.raycastTarget = false;
     }
 
-    public void OnDrag(PointerEventData eventData) { }
+    public void OnDrag(PointerEventData eventData)
+    {
+        if (isPlayed) return;
+    }
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        if (isPlayed) return;
+
         EndDragEvent?.Invoke(this);
         isDragging = false;
         canvas.GetComponent<GraphicRaycaster>().enabled = true;
@@ -132,18 +140,21 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
 
     public void OnPointerEnter(PointerEventData eventData)
     {
+        if (isPlayed) return;
         PointerEnterEvent?.Invoke(this);
         isHovering = true;
     }
 
     public void OnPointerExit(PointerEventData eventData)
     {
+        if (isPlayed) return;
         PointerExitEvent?.Invoke(this);
         isHovering = false;
     }
 
     public void OnPointerDown(PointerEventData eventData)
     {
+        if (isPlayed) return;
         if (eventData.button != PointerEventData.InputButton.Left)
             return;
 
@@ -153,6 +164,7 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
 
     public void OnPointerUp(PointerEventData eventData)
     {
+        if (isPlayed) return;
         if (eventData.button != PointerEventData.InputButton.Left)
             return;
 

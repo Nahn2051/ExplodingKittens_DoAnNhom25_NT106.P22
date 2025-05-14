@@ -301,7 +301,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: a4ed52b30ac954791b7f3c691f1a348e, type: 3}
+    m_Font: {fileID: 12800000, guid: 5abfb0a229c98b3499cffa6c59c2ffb4, type: 3}
     m_FontSize: 50
     m_FontStyle: 0
     m_BestFit: 0
@@ -455,7 +455,7 @@ MonoBehaviour:
   joinButton: {fileID: 175927677}
   noRoomFoundText: {fileID: 240454230}
   exitButton: {fileID: 1067116121}
-  runner: {fileID: 0}
+  playerLimit: 5
 --- !u!1 &240454228
 GameObject:
   m_ObjectHideFlags: 0
@@ -1898,7 +1898,6 @@ GameObject:
   - component: {fileID: 1641472593}
   - component: {fileID: 1641472592}
   - component: {fileID: 1641472591}
-  - component: {fileID: 1641472595}
   - component: {fileID: 1641472594}
   m_Layer: 0
   m_Name: Main Camera
@@ -2025,22 +2024,6 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
---- !u!114 &1641472595
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1641472590}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d73b0a95be81246699cf0d9ecdc01863, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  PreferredRunner: 0
-  Components:
-  - {fileID: 1641472591}
-  _guid: 06d24dbd-ac62-408a-
 --- !u!1 &1652753936
 GameObject:
   m_ObjectHideFlags: 0
@@ -2183,7 +2166,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: a4ed52b30ac954791b7f3c691f1a348e, type: 3}
+    m_Font: {fileID: 12800000, guid: 5abfb0a229c98b3499cffa6c59c2ffb4, type: 3}
     m_FontSize: 50
     m_FontStyle: 0
     m_BestFit: 0
@@ -2204,53 +2187,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1694938580}
   m_CullTransparentMesh: 1
---- !u!1 &1792443327
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1792443329}
-  - component: {fileID: 1792443328}
-  m_Layer: 0
-  m_Name: PLayerData
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1792443328
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1792443327}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0a4f18cea8871924893d8acac20c0bcc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  PlayerName: Player
-  AvatarIndex: 23
-  RoomID: 
---- !u!4 &1792443329
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1792443327}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.59957385, y: 0.035063006, z: 0.051430747}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1934200932
 GameObject:
   m_ObjectHideFlags: 0
@@ -4044,6 +3980,63 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!1001 &4583669239285192870
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0.59957385
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.035063006
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.051430747
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224565791367576088, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4740644366809854725, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
+      propertyPath: m_Name
+      value: PLayerData
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: d63d872f52fadd54fbfc427f2725eed5, type: 3}
 --- !u!1001 &4623017050975229672
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -5854,4 +5847,4 @@ SceneRoots:
   - {fileID: 1641472593}
   - {fileID: 235350615}
   - {fileID: 1206960687}
-  - {fileID: 1792443329}
+  - {fileID: 4583669239285192870}
