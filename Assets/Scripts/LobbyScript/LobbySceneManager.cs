@@ -119,11 +119,11 @@ public class LobbySceneManager : MonoBehaviourPunCallbacks
             {
                 if (!hasEnoughPlayers && isHost)
                 {
-                    buttonText.text = "Cần ít nhất 2 người chơi";
-            }
-            else
-            {
-                    buttonText.text = "Bắt đầu";
+                    buttonText.text = "1/2";
+                }
+                else
+                {
+                    buttonText.text = "Play";
                 }
             }
         }
