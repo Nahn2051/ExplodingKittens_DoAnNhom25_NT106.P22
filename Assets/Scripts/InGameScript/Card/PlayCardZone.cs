@@ -19,8 +19,9 @@ public class PlayCardZone : MonoBehaviour
             card.isDragging = false;
             card.isHovering = false;
             card.selected = false;
+            card.isPlayed = true;
 
-            card.GetComponent<UnityEngine.UI.Image>().raycastTarget = true;
+            card.GetComponent<UnityEngine.UI.Image>().raycastTarget = false;
             card.GetComponent<CanvasGroup>().blocksRaycasts = false;
             handHolder.RemoveCard(card);
 
@@ -43,6 +44,7 @@ public class PlayCardZone : MonoBehaviour
         card.isDragging = false;
         card.isHovering = false;
         card.selected = false;
+        card.isPlayed = true;
 
         float randomAngle = Random.Range(-20f, 20f);
 
@@ -53,6 +55,9 @@ public class PlayCardZone : MonoBehaviour
         card.transform.DOLocalMove(Vector3.zero, 0.25f).SetEase(Ease.OutBack);
         card.transform.DORotate(new Vector3(0, 0, randomAngle), 0.25f);
 
+        card.GetComponent<UnityEngine.UI.Image>().raycastTarget = false;
+        card.GetComponent<CanvasGroup>().blocksRaycasts = false;
+        
         card.GetComponent<UnityEngine.UI.Image>().enabled = true;
 
         Debug.Log($"Người chơi {playerActorNumber} đã chơi thẻ {card.data.cardName}: {card.data.effect}");

@@ -133,8 +133,8 @@ public class CardManager : MonoBehaviour
         // Chỉ cho phép rút bài khi đến lượt
         if (GameManager.Instance != null && GameManager.Instance.IsLocalPlayerTurn())
         {
-            // Yêu cầu host xử lý việc rút bài
-            photonView.RPC("RPC_RequestDrawCard", RpcTarget.MasterClient, PhotonNetwork.LocalPlayer.ActorNumber);
+            // Gọi phương thức từ GameManager để rút bài và chuyển lượt
+            GameManager.Instance.OnDrawCardButtonClicked();
         }
         else
         {
@@ -226,6 +226,7 @@ public class CardManager : MonoBehaviour
     }
     
     // Phương thức này để player chơi thẻ bài từ tay vào khu vực chơi
+    // Lưu ý: Đánh bài không tự động chuyển lượt - chỉ có rút bài mới chuyển lượt
     public void PlayCard(Card card, int playerActorNumber)
     {
         // Kiểm tra xem có phải lượt của người chơi không

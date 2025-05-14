@@ -163,7 +163,14 @@ public class GameManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_StartTurn(int playerIndex)
     {
-        Debug.Log("Bắt đầu lượt chơi của người chơi index: " + playerIndex);
+        // Lấy thông tin người chơi đang có lượt
+        string activePlayerName = "Unknown";
+        if (playerIndex >= 0 && playerIndex < playerList.Count)
+        {
+            activePlayerName = playerList[playerIndex].NickName;
+        }
+        
+        Debug.Log("Bắt đầu lượt chơi của người chơi: " + activePlayerName + " (index: " + playerIndex + ")");
         
         bool isLocalPlayerTurn = (playerIndex == localPlayerIndex);
         
@@ -178,6 +185,12 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (isLocalPlayerTurn)
         {
             Debug.Log("Đến lượt của bạn! Hãy rút một lá bài.");
+            // Hiển thị thông báo "Đến lượt của bạn!" - bạn có thể thêm code UI thông báo ở đây
+        }
+        else
+        {
+            Debug.Log("Đang đến lượt của " + activePlayerName);
+            // Hiển thị thông báo "Đang đến lượt của [tên]" - bạn có thể thêm code UI thông báo ở đây
         }
         
         // Cập nhật màu background cho tất cả player slot
@@ -217,8 +230,14 @@ public class GameManager : MonoBehaviourPunCallbacks
         // Kiểm tra có phải lượt của người chơi hiện tại không
         if (currentTurnIndex == localPlayerIndex)
         {
-            // Rút bài
-            photonView.RPC("RPC_PlayerDrawCard", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
+            Debug.Log("Đang rút bài và chuyển lượt...");
+            
+            // Rút bài thông qua CardManager
+            if (CardManager.Instance != null)
+            {
+                // Yêu cầu host xử lý việc rút bài
+                CardManager.Instance.PhotonView.RPC("RPC_RequestDrawCard", RpcTarget.MasterClient, PhotonNetwork.LocalPlayer.ActorNumber);
+            }
             
             // Chuyển lượt sang người tiếp theo
             int nextPlayerIndex = (currentTurnIndex + 1) % playerList.Count;
