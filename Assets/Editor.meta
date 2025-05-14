@@ -1,6 +1,10 @@
 fileFormatVersion: 2
+<<<<<<<< HEAD:Assets/Editor.meta
 guid: 1cb9e54f17e46c84aa4e7bb2a8b3aee6
 folderAsset: yes
+========
+guid: 2d20848059087524c86d58b2906d679b
+>>>>>>>> 4fc4c92664fdc1ec6ebfe4810257d5097d7e4d8f:Assets/Photon/Fusion/Assemblies/Debug/Fusion.Log.dll.debug.meta
 DefaultImporter:
   externalObjects: {}
   userData: 

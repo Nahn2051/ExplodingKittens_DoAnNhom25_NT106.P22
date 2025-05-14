@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<<< HEAD:Assets/Scenes/JoinScene.unity.meta
 guid: 308a5f386324d7644ba7ea7a14accdd7
+========
+guid: b2cdb6507ebc6f040af670254bbaa2c9
+>>>>>>>> 4fc4c92664fdc1ec6ebfe4810257d5097d7e4d8f:Assets/Photon/Fusion/Assemblies/Debug/Fusion.Realtime.dll.debug.meta
 DefaultImporter:
   externalObjects: {}
   userData: 
