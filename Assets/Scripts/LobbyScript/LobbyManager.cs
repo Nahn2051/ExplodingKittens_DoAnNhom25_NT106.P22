@@ -20,7 +20,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public AvatarImageManager avatarImageManager;
     public GameObject notificationPanel;
     public TMP_Text notificationText;
-    
+
     private Dictionary<PlayerRef, GameObject> playerInfoSlots = new Dictionary<PlayerRef, GameObject>();
     private Dictionary<PlayerRef, PlayerLobbyData> playerLobbyDatas = new Dictionary<PlayerRef, PlayerLobbyData>();
 
@@ -34,7 +34,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     {
         Debug.Log("LobbyManager Start");
         // Các thiết lập UI và non-network được thực hiện ở đây
-        
+
         if (PlayerData.Instance != null)
         {
             roomIDText.text = "Room ID: " + PlayerData.Instance.RoomID;
@@ -47,9 +47,9 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         exitButton.onClick.AddListener(OnExitClicked);
         playButton.onClick.AddListener(OnPlayClicked);
-        
+
         // Các thiết lập Network-related sẽ được thực hiện trong Spawned
-        
+
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
@@ -57,7 +57,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public override void Spawned()
     {
         Debug.Log("LobbyManager Spawned - This is a network object now");
-        
+
         // Lấy tham chiếu runner
         runner = FindObjectOfType<NetworkRunner>();
         if (runner == null)
@@ -65,22 +65,22 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
             Debug.LogError("NetworkRunner not found after spawning!");
             return;
         }
-        
+
         // Đăng ký callbacks
         runner.AddCallbacks(this);
-        
+
         // Xóa danh sách người chơi cũ nếu có
         ClearPlayerList();
-        
+
         // Thiết lập UI dựa trên vai trò
         playButton.gameObject.SetActive(runner.IsServer);
         playButton.interactable = false;
-        
+
         // Thiết lập thông tin người chơi local
         if (runner.LocalPlayer != default)
         {
             SetupLocalPlayerInfo();
-            
+
             // Client yêu cầu danh sách người chơi
             if (!runner.IsServer)
             {
@@ -97,13 +97,13 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
         Debug.Log("LobbyManager Despawned");
-        
+
         // Hủy đăng ký callbacks để tránh memory leak
         if (runner != null)
         {
             runner.RemoveCallbacks(this);
         }
-        
+
         // Xóa tham chiếu
         this.runner = null;
     }
@@ -115,7 +115,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
             Debug.LogError("PlayerData.Instance is null in SetupLocalPlayerInfo");
             return;
         }
-        
+
         Debug.Log($"Setting up local player: {PlayerData.Instance.PlayerName}, Avatar: {PlayerData.Instance.AvatarIndex}");
 
         if (runner.IsServer)
@@ -128,10 +128,10 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
 
             // Thêm vào cache
             playerLobbyDatas[runner.LocalPlayer] = data;
-            
+
             // Tạo UI
             SpawnPlayerInfo(runner.LocalPlayer, PlayerData.Instance.PlayerName, PlayerData.Instance.AvatarIndex);
-            
+
             // Broadcast
             RPC_BroadcastPlayerInfo(runner.LocalPlayer, PlayerData.Instance.PlayerName, PlayerData.Instance.AvatarIndex);
         }
@@ -161,7 +161,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     private void ClearPlayerList()
     {
         Debug.Log($"Clearing player list. Slots count: {playerInfoSlots.Count}");
-        
+
         if (playerListContainer != null)
         {
             // Destroy all children of playerListContainer
@@ -170,7 +170,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
                 Destroy(child.gameObject);
             }
         }
-        
+
         foreach (var playerSlot in playerInfoSlots.Values)
         {
             if (playerSlot != null)
@@ -213,7 +213,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
         if (playerSetInfo != null)
         {
             playerSetInfo.SetPlayerName(playerName);
-            
+
             if (avatarImageManager != null)
             {
                 Sprite avatarSprite = avatarImageManager.SetImage(avatarIndex);
@@ -230,7 +230,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
             {
                 Debug.LogError("avatarImageManager is not assigned!");
             }
-            
+
             // Đánh dấu người chơi hiện tại
             bool isLocalPlayer = (runner != null && runner.LocalPlayer == player);
             playerSetInfo.SetIsLocalPlayer(isLocalPlayer);
@@ -239,7 +239,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
         {
             Debug.LogError("PlayerSetInfo component not found on playerInfoPrefab!");
         }
-        
+
         // Cập nhật trạng thái nút Play nếu là server
         if (runner != null && runner.IsServer)
         {
@@ -251,7 +251,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void RPC_ClientSendsInfo(string name, int avatar, RpcInfo info = default)
     {
         Debug.Log($"RPC_ClientSendsInfo from {info.Source}, Name: {name}, Avatar: {avatar}");
-        
+
         PlayerLobbyData data = new PlayerLobbyData
         {
             PlayerName = name,
@@ -260,7 +260,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         // Thêm vào cache server
         playerLobbyDatas[info.Source] = data;
-        
+
         // Broadcast
         RPC_BroadcastPlayerInfo(info.Source, name, avatar);
     }
@@ -269,7 +269,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void RPC_RequestPlayerList(RpcInfo info = default)
     {
         Debug.Log($"RPC_RequestPlayerList from {info.Source}. Player count: {playerLobbyDatas.Count}");
-        
+
         foreach (var kvp in playerLobbyDatas)
         {
             RPC_SendPlayerInfoToClient(info.Source, kvp.Key, kvp.Value.PlayerName.ToString(), kvp.Value.AvatarIndex);
@@ -280,7 +280,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void RPC_BroadcastPlayerInfo(PlayerRef player, string name, int avatar)
     {
         Debug.Log($"RPC_BroadcastPlayerInfo: Player: {player}, Name: {name}, Avatar: {avatar}");
-        
+
         // Cập nhật cache
         PlayerLobbyData data = new PlayerLobbyData
         {
@@ -297,7 +297,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void RPC_SendPlayerInfoToClient(PlayerRef targetPlayer, PlayerRef playerToShow, string name, int avatar, RpcInfo info = default)
     {
         Debug.Log($"RPC_SendPlayerInfoToClient: Target: {targetPlayer}, PlayerToShow: {playerToShow}, Name: {name}, Avatar: {avatar}");
-        
+
         // Only process this RPC if we are the target client
         if (runner.LocalPlayer != targetPlayer) return;
 
@@ -317,7 +317,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void RPC_UpdatePlayerInfo(PlayerRef player, string name, int avatar)
     {
         Debug.Log($"RPC_UpdatePlayerInfo: Player: {player}, Name: {name}, Avatar: {avatar}");
-        
+
         // Update local cache
         PlayerLobbyData data = new PlayerLobbyData
         {
@@ -363,12 +363,12 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
         {
             notificationText.text = message;
             notificationPanel.SetActive(true);
-            
+
             // Tự động ẩn thông báo sau 3 giây
             StartCoroutine(HideNotification(3f));
         }
     }
-    
+
     // Coroutine ẩn thông báo (thêm mới)
     private IEnumerator HideNotification(float delay)
     {
@@ -382,7 +382,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
         Debug.Log($"Player {player} joined the lobby.");
-        
+
         if (runner.IsServer)
         {
             // When a player joins, send them information about all existing players
@@ -390,10 +390,10 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
             {
                 RPC_SendPlayerInfoToClient(player, kvp.Key, kvp.Value.PlayerName.ToString(), kvp.Value.AvatarIndex);
             }
-            
+
             // Hiển thị thông báo có người chơi mới tham gia
             ShowNotification($"Người chơi mới đã tham gia!");
-            
+
             // Kiểm tra số lượng người chơi
             UpdatePlayButtonState();
         }
@@ -430,7 +430,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
         if (runner.IsServer)
         {
             RPC_RemovePlayer(player);
-            
+
             // Kiểm tra số lượng người chơi
             UpdatePlayButtonState();
         }
@@ -440,7 +440,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void RPC_RemovePlayer(PlayerRef player)
     {
         Debug.Log($"RPC_RemovePlayer: {player}");
-        
+
         // Remove from UI
         if (playerInfoSlots.TryGetValue(player, out GameObject playerSlot) && playerSlot != null)
         {
@@ -462,7 +462,7 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
         {
             bool enoughPlayers = playerLobbyDatas.Count >= 2;
             playButton.interactable = enoughPlayers;
-            
+
             if (!enoughPlayers && playButton.gameObject.activeInHierarchy)
             {
                 ShowNotification("Cần ít nhất 2 người chơi để bắt đầu game!");
@@ -477,17 +477,17 @@ public class LobbyManager : NetworkBehaviour, INetworkRunnerCallbacks
     {
         Debug.Log($"Lobby Shutdown: {shutdownReason}");
     }
-    
+
     public void OnConnectedToServer(NetworkRunner runner)
     {
         Debug.Log("Connected to server in Lobby.");
     }
-    
+
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
     {
         Debug.Log($"Disconnected from server in Lobby: {reason}");
     }
-    
+
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
     {

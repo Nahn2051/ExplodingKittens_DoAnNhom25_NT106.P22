@@ -63,6 +63,8 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
     
     private void Start()
     {
+        hostButton.interactable = false;
+        joinButton.interactable = false;
         // Thiết lập kết nối với Photon Cloud
         if (!PhotonNetwork.IsConnected)
         {
