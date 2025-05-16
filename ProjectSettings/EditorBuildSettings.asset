@@ -12,15 +12,18 @@ EditorBuildSettings:
     path: Assets/Scenes/Main Menu.unity
     guid: 570c06d5a22029349b9adca7977b5a44
   - enabled: 1
+    path: Assets/Scenes/ProfileScene.unity
+    guid: 2b90d2b1ebe5b8649ab6cbb808679aa8
+  - enabled: 1
     path: Assets/Scenes/JoinScene.unity
     guid: 308a5f386324d7644ba7ea7a14accdd7
-  - enabled: 1
-    path: Assets/Scenes/InGame.unity
-    guid: bcc1bcc2dbd41bd4ca0fb1cd0567352e
   - enabled: 1
     path: Assets/Scenes/LobbyScene.unity
     guid: 3a368397cde040a4b89fd6f89903c8ec
   - enabled: 1
-    path: Assets/Scenes/ProfileScene.unity
-    guid: 2b90d2b1ebe5b8649ab6cbb808679aa8
+    path: Assets/Scenes/InGame.unity
+    guid: bcc1bcc2dbd41bd4ca0fb1cd0567352e
+  - enabled: 1
+    path: Assets/Scenes/SettingsScene.unity
+    guid: 9a915e8118fb87d47a91d522593e2c4f
   m_configObjects: {}

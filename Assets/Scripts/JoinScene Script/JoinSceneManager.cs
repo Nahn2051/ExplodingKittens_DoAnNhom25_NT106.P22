@@ -6,6 +6,7 @@ using Photon.Realtime;
 using TMPro;
 using System;
 using System.Collections;
+using UnityEngine.Audio;
 
 public class JoinSceneManager : MonoBehaviourPunCallbacks
 {
@@ -21,7 +22,8 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
     public Button joinButton;
     public TMP_Text noRoomFoundText;
     public Button exitButton;
-    
+    public AudioMixer MainAudioMixer;
+
     [Header("Network Settings")]
     public int playerLimit = 5;
     
@@ -84,6 +86,9 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
         
         // Tự động điền UI với dữ liệu người chơi hiện có
         InitializeUIFromPlayerData();
+
+        float vol = PlayerPrefs.GetFloat("MusicVol", 0.75f); // Giá trị mặc định 0.75
+        MainAudioMixer.SetFloat("MusicVol", vol);
     }
     
     private void SetupUIListeners()

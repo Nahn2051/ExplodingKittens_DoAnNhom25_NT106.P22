@@ -6,11 +6,12 @@ using Photon.Realtime;
 using TMPro;
 using System;
 using UnityEngine.UI;
+using UnityEngine.Audio;
 
 public class GameManager : MonoBehaviourPunCallbacks
 {
     public static GameManager Instance;
-    
+    public AudioMixer MainAudioMixer;
     [Header("Game Settings")]
     [SerializeField] private int initialCardCount = 5;
     
@@ -50,6 +51,8 @@ public class GameManager : MonoBehaviourPunCallbacks
     private void Start()
     {
         InitializeGame();
+        float vol = PlayerPrefs.GetFloat("MusicVol", 0.75f); // Giá trị mặc định 0.75
+        MainAudioMixer.SetFloat("MusicVol", vol);
     }
     
     public int GetCurrentTurnIndex()

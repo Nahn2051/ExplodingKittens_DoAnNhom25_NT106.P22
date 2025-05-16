@@ -7,6 +7,7 @@ using Photon.Realtime;
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.Audio;
 
 public class LobbySceneManager : MonoBehaviourPunCallbacks
 {
@@ -17,7 +18,7 @@ public class LobbySceneManager : MonoBehaviourPunCallbacks
     public GameObject playerItemPrefab;
     public Button startGameButton;
     public Button leaveButton;
-    
+    public AudioMixer MainAudioMixer;
     [Header("Avatar Display")]
     public LobbyPlayerDisplay localPlayerDisplay;
     
@@ -39,6 +40,8 @@ public class LobbySceneManager : MonoBehaviourPunCallbacks
     private void Start()
     {
         StartCoroutine(InitializeAfterConnection());
+        float vol = PlayerPrefs.GetFloat("MusicVol", 0.75f); // Giá trị mặc định 0.75
+        MainAudioMixer.SetFloat("MusicVol", vol);
     }
     
     private IEnumerator InitializeAfterConnection()
