@@ -8,105 +8,251 @@ using UnityEngine.UI;
 
 public class FirebaseLoginManager : MonoBehaviour
 {
-    // Đăng kí tài khoản
-    [Header(header: "Register Account")]
-    public InputField idRegisterEmail;
-    public InputField idRegisterPassword;
-
-    public Button buttonRegister;
-
-    //Đăng nhập tài khoản
-    [Header(header: "Login Account")]
-    public InputField idLoginEmail;
-    public InputField idLoginPassword;
-
-    public Button buttonLogin;
-
     private FirebaseAuth auth;
 
-    // Chuyển đổi qua lại giữa đăng nhập và đăng ký
-    [Header(header: "Switch")]
-    public Button buttonMovetoRegister;
-    public Button buttonMovetoLogin;
-    public Button buttonForgotPassword;
+    [Header("Register Account")]
+    public InputField registerEmailInput;
+    public InputField registerPasswordInput;
+    public InputField registerConfirmPasswordInput;
+    public Button registerButton;
 
-    public GameObject loginForm;
-    public GameObject registerForm;
-    public GameObject ForgotPasswordForm;
+    [Header("Login Account")]
+    public InputField loginEmailInput;
+    public InputField loginPasswordInput;
+    public Button loginButton;
+
+    [Header("Forgot Password")]
+    public InputField forgotPasswordEmailInput;
+    public Button sendResetPasswordButton;
+
+    [Header("Switch Forms")]
+    public Button switchToRegisterButton;
+    public Button switchToLoginButton;
+    public Button switchToForgotPasswordButton;
+    public GameObject loginPanel;
+    public GameObject registerPanel;
+    public GameObject forgotPasswordPanel;
+
+    [Header("Popup UI")]
+    public GameObject popupPanel;
+    public Text popupText;
+
+    [Header("Password Toggle - Login")]
+    public GameObject loginEyeShow;
+    public GameObject loginEyeHide;
+    private bool isLoginPasswordVisible = false;
+
+    [Header("Password Toggle - Register")]
+    public GameObject registerEyeShow;
+    public GameObject registerEyeHide;
+    private bool isRegisterPasswordVisible = false;
+
+    [Header("Password Toggle - Confirm")]
+    public GameObject registerConfirmEyeShow;
+    public GameObject registerConfirmEyeHide;
+    private bool isRegisterConfirmPasswordVisible = false;
 
     private void Start()
     {
         auth = FirebaseAuth.DefaultInstance;
-        buttonRegister.onClick.AddListener(RegisterAccount);
-        buttonLogin.onClick.AddListener(LoginAccount);
-        buttonMovetoRegister.onClick.AddListener(MoveToRegister);
-        buttonMovetoLogin.onClick.AddListener(MoveToLogin);
-        buttonForgotPassword.onClick.AddListener(MoveToForgotPassword);
+
+        // Set default UI panel
+        loginPanel.SetActive(true);
+        registerPanel.SetActive(false);
+        forgotPasswordPanel.SetActive(false);
+
+        // Bind button listeners
+        registerButton.onClick.AddListener(RegisterAccount);
+        loginButton.onClick.AddListener(LoginAccount);
+        switchToRegisterButton.onClick.AddListener(SwitchToRegister);
+        switchToLoginButton.onClick.AddListener(SwitchToLogin);
+        switchToForgotPasswordButton.onClick.AddListener(SwitchToForgotPassword);
+        sendResetPasswordButton.onClick.AddListener(SendPasswordResetEmail);
+    }
+
+    public void ShowPopup(string message)
+    {
+        popupText.text = message;
+        popupPanel.SetActive(true);
+    }
+
+    public void HidePopup()
+    {
+        popupPanel.SetActive(false);
+    }
+
+    private bool IsValidEmail(string email)
+    {
+        return email.Contains("@") && email.Contains(".");
     }
 
     public void RegisterAccount()
     {
-        string email = idRegisterEmail.text;
-        string password = idRegisterPassword.text;
-        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        string email = registerEmailInput.text;
+        string password = registerPasswordInput.text;
+        string confirmPassword = registerConfirmPasswordInput.text;
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(confirmPassword))
         {
-            Debug.Log("Email or Password is empty");
+            ShowPopup("Please fill in all fields.");
             return;
         }
+
+        if (!IsValidEmail(email))
+        {
+            ShowPopup("Invalid email format.");
+            return;
+        }
+
+        if (password != confirmPassword)
+        {
+            ShowPopup("Password and confirmation do not match.");
+            return;
+        }
+
         auth.CreateUserWithEmailAndPasswordAsync(email, password).ContinueWithOnMainThread(task =>
         {
             if (task.IsCanceled || task.IsFaulted)
             {
-                Debug.Log("Create user failed.");
+                ShowPopup("Failed to create account.");
                 return;
             }
-            Debug.Log(message: "Firebase user created successfully");
+
+            FirebaseUser newUser = task.Result.User;
+            newUser.SendEmailVerificationAsync().ContinueWithOnMainThread(verifyTask =>
+            {
+                if (verifyTask.IsCanceled || verifyTask.IsFaulted)
+                {
+                    ShowPopup("Failed to send verification email.");
+                    return;
+                }
+                ShowPopup("Registration successful! Please check your email to verify your account.");
+            });
         });
     }
 
     public void LoginAccount()
     {
-        string email = idLoginEmail.text;
-        string password = idLoginPassword.text;
+        string email = loginEmailInput.text;
+        string password = loginPasswordInput.text;
+
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
         {
-            Debug.Log("Email or Password is empty");
+            ShowPopup("Please enter both email and password.");
             return;
         }
+
         auth.SignInWithEmailAndPasswordAsync(email, password).ContinueWithOnMainThread(task =>
         {
-            if (task.IsCanceled)
+            if (task.IsCanceled || task.IsFaulted)
             {
-                Debug.Log("Sign in was canceled.");
+                ShowPopup("Login failed. Please check your credentials.");
                 return;
             }
-            if (task.IsFaulted)
+
+            FirebaseUser user = task.Result.User;
+            if (!user.IsEmailVerified)
             {
-                Debug.Log(message: "Sign in encountered an error");
+                ShowPopup("Email is not verified.");
+                auth.SignOut();
                 return;
             }
-            Debug.Log(message: "Firebase user signed in successfully");
-            FirebaseUser newUser = task.Result.User;
 
-            // Chuyển cảnh vào game
-            SceneManager.LoadScene(sceneName: "Main Menu");
-
+            SceneManager.LoadScene("Main Menu");
         });
     }
-    public void MoveToRegister()
+
+    public void SendPasswordResetEmail()
     {
-        loginForm.SetActive(false);
-        registerForm.SetActive(true);
+        string email = forgotPasswordEmailInput.text;
+
+        if (string.IsNullOrEmpty(email))
+        {
+            ShowPopup("Please enter your email address.");
+            return;
+        }
+
+        if (!IsValidEmail(email))
+        {
+            ShowPopup("Invalid email format.");
+            return;
+        }
+
+        auth.SendPasswordResetEmailAsync(email).ContinueWithOnMainThread(task =>
+        {
+            if (task.IsCanceled || task.IsFaulted)
+            {
+                ShowPopup("Failed to send reset password email.");
+                return;
+            }
+
+            ShowPopup("Password reset email sent. Please check your inbox.");
+        });
     }
-    public void MoveToLogin()
+
+    public void ToggleLoginPasswordVisibility()
     {
-        loginForm.SetActive(true);
-        registerForm.SetActive(false);
+        isLoginPasswordVisible = !isLoginPasswordVisible;
+        loginPasswordInput.contentType = isLoginPasswordVisible ? InputField.ContentType.Standard : InputField.ContentType.Password;
+        loginPasswordInput.ForceLabelUpdate();
+
+        loginEyeShow.SetActive(isLoginPasswordVisible);
+        loginEyeHide.SetActive(!isLoginPasswordVisible);
     }
-    public void MoveToForgotPassword()  
+
+    public void ToggleRegisterPasswordVisibility()
     {
-        loginForm.SetActive(false);
-        registerForm.SetActive(false);
-        ForgotPasswordForm.SetActive(true);
+        isRegisterPasswordVisible = !isRegisterPasswordVisible;
+        registerPasswordInput.contentType = isRegisterPasswordVisible ? InputField.ContentType.Standard : InputField.ContentType.Password;
+        registerPasswordInput.ForceLabelUpdate();
+
+        registerEyeShow.SetActive(isRegisterPasswordVisible);
+        registerEyeHide.SetActive(!isRegisterPasswordVisible);
+    }
+
+    public void ToggleRegisterConfirmPasswordVisibility()
+    {
+        isRegisterConfirmPasswordVisible = !isRegisterConfirmPasswordVisible;
+        registerConfirmPasswordInput.contentType = isRegisterConfirmPasswordVisible ? InputField.ContentType.Standard : InputField.ContentType.Password;
+        registerConfirmPasswordInput.ForceLabelUpdate();
+
+        registerConfirmEyeShow.SetActive(isRegisterConfirmPasswordVisible);
+        registerConfirmEyeHide.SetActive(!isRegisterConfirmPasswordVisible);
+    }
+
+    public void SwitchToRegister()
+    {
+        loginPanel.SetActive(false);
+        registerPanel.SetActive(true);
+        forgotPasswordPanel.SetActive(false);
+        ClearAllInputs();
+    }
+
+    public void SwitchToLogin()
+    {
+        loginPanel.SetActive(true);
+        registerPanel.SetActive(false);
+        forgotPasswordPanel.SetActive(false);
+        ClearAllInputs();
+    }
+
+    public void SwitchToForgotPassword()
+    {
+        loginPanel.SetActive(false);
+        registerPanel.SetActive(false);
+        forgotPasswordPanel.SetActive(true);
+        ClearAllInputs();
+    }
+
+    private void ClearAllInputs()
+    {
+        loginEmailInput.text = "";
+        loginPasswordInput.text = "";
+        registerEmailInput.text = "";
+        registerPasswordInput.text = "";
+        registerConfirmPasswordInput.text = "";
+        forgotPasswordEmailInput.text = "";
+
+        HidePopup();
     }
 }
