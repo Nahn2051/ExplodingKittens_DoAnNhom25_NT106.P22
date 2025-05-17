@@ -60,13 +60,9 @@ public class FirebaseLoginManager : MonoBehaviour
         loginPanel.SetActive(true);
         registerPanel.SetActive(false);
         forgotPasswordPanel.SetActive(false);
-
         // Bind button listeners
         registerButton.onClick.AddListener(RegisterAccount);
         loginButton.onClick.AddListener(LoginAccount);
-        switchToRegisterButton.onClick.AddListener(SwitchToRegister);
-        switchToLoginButton.onClick.AddListener(SwitchToLogin);
-        switchToForgotPasswordButton.onClick.AddListener(SwitchToForgotPassword);
         sendResetPasswordButton.onClick.AddListener(SendPasswordResetEmail);
     }
 
