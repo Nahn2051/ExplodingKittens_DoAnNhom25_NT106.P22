@@ -4,6 +4,8 @@ using TMPro;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.Audio;
+using Firebase;
+using Firebase.Auth;
 
 public class ProfileManager : MonoBehaviour
 {
@@ -17,6 +19,7 @@ public class ProfileManager : MonoBehaviour
     public GameObject avatarContain;
     public Image Avatar;
     public AvatarImageManager avatarImageManager;
+    public TextMeshProUGUI uidText;
     void Start()
     {
         savePanel.SetActive(false); // Ẩn bảng lúc đầu
@@ -32,6 +35,26 @@ public class ProfileManager : MonoBehaviour
         InitializeUIFromPlayerData();
         float vol = PlayerPrefs.GetFloat("MusicVol", 0.75f); // Giá trị mặc định 0.75
         MainAudioMixer.SetFloat("MusicVol", vol);
+        if (MainAudioMixer != null)
+        {
+            MainAudioMixer.SetFloat("MusicVol", vol);
+        }
+        else
+        {
+            Debug.LogError("MainAudioMixer is NULL on GameObject: " + gameObject.name);
+        }
+        if (FirebaseAuth.DefaultInstance.CurrentUser != null)
+        {
+            string firebaseUserId = FirebaseAuth.DefaultInstance.CurrentUser.UserId;
+            Debug.Log("Firebase User ID: " + firebaseUserId);
+
+            if (PlayerData.Instance != null)
+                PlayerData.Instance.UserId = firebaseUserId;
+        }
+        else
+        {
+            Debug.LogWarning("Chưa đăng nhập Firebase! UserId không có.");
+        }
     }
 
     public void OnSaveButtonClick()
@@ -109,97 +132,11 @@ public class ProfileManager : MonoBehaviour
     {
         avatarButton.onClick.AddListener(OnAvatarClicked);
     }
+    void Update()
+    {
+        if (PlayerData.Instance != null && uidText != null)
+        {
+            uidText.text = "UID: " + PlayerData.Instance.UserId;
+        }
+    }
 }
-//using System.Collections;
-//using UnityEngine;
-//using TMPro;
-//using UnityEngine.UI;
-//using UnityEngine.SceneManagement;
-
-//public class ProfileManager : MonoBehaviour
-//{
-//    [Header("Save Success UI")]
-//    public GameObject savePanel;
-//    public TextMeshProUGUI saveText;
-
-//    [Header("Player Data UI")]
-//    public TMP_InputField nameInput;
-//    public Button avatarButton;
-//    public GameObject avatarContain;
-//    public Image Avatar;
-//    public AvatarImageManager avatarImageManager;
-
-//    void Start()
-//    {
-//        savePanel.SetActive(false);
-//        SetupUIListeners();
-
-//        if (PlayerData.Instance == null)
-//        {
-//            GameObject playerDataObj = new GameObject("PlayerData");
-//            playerDataObj.AddComponent<PlayerData>();
-//        }
-
-//        InitializeUIFromPlayerData();
-//    }
-
-//    private void InitializeUIFromPlayerData()
-//    {
-//        if (PlayerData.Instance != null)
-//        {
-//            nameInput.text = PlayerData.Instance.PlayerName;
-//            SetAvatarImage(PlayerData.Instance.AvatarIndex);
-//        }
-//    }
-
-//    public void OnSaveButtonClick()
-//    {
-//        if (PlayerData.Instance != null)
-//        {
-//            PlayerData.Instance.PlayerName = nameInput.text;
-//            ShowSaveMessage("Saved successfully!");
-//        }
-//    }
-
-//    public void LoadMainMenu()
-//    {
-//        SceneManager.LoadScene("Main Menu"); // đổi tên đúng với scene join của bạn
-//    }
-
-//    void ShowSaveMessage(string message)
-//    {
-//        saveText.text = message;
-//        savePanel.SetActive(true);
-//        StartCoroutine(HideSaveMessageAfterDelay(2f));
-//    }
-
-//    IEnumerator HideSaveMessageAfterDelay(float delay)
-//    {
-//        yield return new WaitForSeconds(delay);
-//        savePanel.SetActive(false);
-//    }
-
-//    public void OnAvatarClicked()
-//    {
-//        if (avatarContain != null)
-//            avatarContain.SetActive(!avatarContain.activeSelf);
-//    }
-
-//    public void SetAvatarImage(int index)
-//    {
-//        if (avatarImageManager != null && Avatar != null)
-//        {
-//            Avatar.sprite = avatarImageManager.SetImage(index);
-
-//            if (PlayerData.Instance != null)
-//                PlayerData.Instance.AvatarIndex = index;
-
-//            if (avatarContain != null)
-//                avatarContain.SetActive(false);
-//        }
-//    }
-//    private void SetupUIListeners()
-//    {
-//        avatarButton.onClick.AddListener(OnAvatarClicked);
-//    }
-//}

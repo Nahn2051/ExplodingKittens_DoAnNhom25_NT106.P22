@@ -8,6 +8,7 @@ public class PlayerData : MonoBehaviour
     [SerializeField] public string PlayerName = "Player";
     [SerializeField] public int AvatarIndex = 23;
     [SerializeField] public string RoomID;
+    [SerializeField] public string UserId;
 
     private void Awake()
     {

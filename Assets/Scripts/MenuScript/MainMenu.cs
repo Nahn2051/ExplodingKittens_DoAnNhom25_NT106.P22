@@ -31,4 +31,8 @@ public class MainMenu : MonoBehaviour
     {
         SceneManager.LoadScene("SettingsScene");
     }
+    public void LoadLoginScene()
+    {
+        SceneManager.LoadScene("LoginScene");
+    }
 }

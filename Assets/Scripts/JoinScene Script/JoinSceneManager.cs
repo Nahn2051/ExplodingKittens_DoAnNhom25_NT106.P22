@@ -7,6 +7,7 @@ using TMPro;
 using System;
 using System.Collections;
 using UnityEngine.Audio;
+using Firebase.Auth;
 
 public class JoinSceneManager : MonoBehaviourPunCallbacks
 {
@@ -23,6 +24,7 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
     public TMP_Text noRoomFoundText;
     public Button exitButton;
     public AudioMixer MainAudioMixer;
+    public TextMeshProUGUI uidText;
 
     [Header("Network Settings")]
     public int playerLimit = 5;
@@ -67,6 +69,7 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
     {
         hostButton.interactable = false;
         joinButton.interactable = false;
+        avatarButton.interactable = false;
         // Thiết lập kết nối với Photon Cloud
         if (!PhotonNetwork.IsConnected)
         {
@@ -75,7 +78,7 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
         }
         
         SetupUIListeners();
-        
+
         // Đảm bảo PlayerData tồn tại
         if (PlayerData.Instance == null)
         {
@@ -89,8 +92,26 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
 
         float vol = PlayerPrefs.GetFloat("MusicVol", 0.75f); // Giá trị mặc định 0.75
         MainAudioMixer.SetFloat("MusicVol", vol);
+        if (FirebaseAuth.DefaultInstance.CurrentUser != null)
+        {
+            string firebaseUserId = FirebaseAuth.DefaultInstance.CurrentUser.UserId;
+            Debug.Log("Firebase User ID: " + firebaseUserId);
+
+            if (PlayerData.Instance != null)
+                PlayerData.Instance.UserId = firebaseUserId;
+        }
+        else
+        {
+            Debug.LogWarning("Chưa đăng nhập Firebase! UserId không có.");
+        }
     }
-    
+    void Update()
+    {
+        if (PlayerData.Instance != null && uidText != null)
+        {
+            uidText.text = "UID: " + PlayerData.Instance.UserId;
+        }
+    }
     private void SetupUIListeners()
     {
         avatarButton.onClick.AddListener(OnAvatarClicked);
@@ -109,9 +130,11 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
         if (PlayerData.Instance != null)
         {
             if (!string.IsNullOrEmpty(PlayerData.Instance.PlayerName))
+            {
                 nameInput.text = PlayerData.Instance.PlayerName;
-                
-            SetAvatarImage(PlayerData.Instance.AvatarIndex);
+                nameInput.interactable = false;
+            }
+                SetAvatarImage(PlayerData.Instance.AvatarIndex);
         }
     }
 
