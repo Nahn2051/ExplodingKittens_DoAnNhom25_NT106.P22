@@ -1029,6 +1029,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e80385806ff6a1b44a95d78be019332b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  MainAudioMixer: {fileID: 0}
   initialCardCount: 5
   playerSlotPrefab: {fileID: 8209006278871891395, guid: 822f629888c63064daa41aba28bc48ba, type: 3}
   playerSlotsContainer: {fileID: 1874348300}

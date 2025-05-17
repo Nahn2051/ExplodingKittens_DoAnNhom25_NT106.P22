@@ -1197,6 +1197,7 @@ MonoBehaviour:
   playerItemPrefab: {fileID: 8209006278871891395, guid: 4b826723d5f63e7488835fbcad259701, type: 3}
   startGameButton: {fileID: 1519916057}
   leaveButton: {fileID: 330324214}
+  MainAudioMixer: {fileID: 0}
   localPlayerDisplay: {fileID: 689245984}
 --- !u!4 &1137136555
 Transform:
