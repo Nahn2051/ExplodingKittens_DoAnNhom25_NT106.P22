@@ -443,7 +443,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 189.42001, y: -282}
+  m_AnchoredPosition: {x: 218, y: -282}
   m_SizeDelta: {x: 111, y: 40}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &202769048
@@ -1247,7 +1247,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &941729989
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1975,7 +1975,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 210, y: -254}
+  m_AnchoredPosition: {x: 233, y: -254}
   m_SizeDelta: {x: 150, y: 40}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1498360421
@@ -3466,7 +3466,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: Already have an account?
+  m_Text: 'Already have an account?  '
 --- !u!114 &1259382187635946463
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3818,8 +3818,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -30, y: -254}
-  m_SizeDelta: {x: 378.6931, y: 40}
+  m_AnchoredPosition: {x: -35.525, y: -254}
+  m_SizeDelta: {x: 367.64, y: 40}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &2343984220022429938
 CanvasRenderer:
@@ -4127,8 +4127,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -61.261, y: -282}
-  m_SizeDelta: {x: 390.3621, y: 40}
+  m_AnchoredPosition: {x: -50.97103, y: -282}
+  m_SizeDelta: {x: 410.94, y: 40}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &2925050927516798685
 GameObject:
@@ -4981,7 +4981,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 'Don''t have an account?    '
+  m_Text: 'Don''t have an account?  '
 --- !u!114 &5800997505734817782
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6118,7 +6118,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!222 &8306022255080793886
 CanvasRenderer:
   m_ObjectHideFlags: 0
