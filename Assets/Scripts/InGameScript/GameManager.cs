@@ -29,7 +29,10 @@ public class GameManager : MonoBehaviourPunCallbacks
     private int localPlayerIndex = -1;
     private List<PlayerSlot> playerSlots = new List<PlayerSlot>();
     private int lastPlayerDrawCardIndex = -1;
-    
+
+    [Header("Effect States")]
+    private int attackTurns = 1; // Số lượt phải chơi, bình thường là 1, bị Attack sẽ là 2
+
     private void Awake()
     {
         if (Instance == null)
@@ -176,84 +179,63 @@ public class GameManager : MonoBehaviourPunCallbacks
     
     public void OnDrawCardButtonClicked()
     {
-        // Kiểm tra có phải lượt của người chơi hiện tại không
-        if (currentTurnIndex == localPlayerIndex)
+        if (IsLocalPlayerTurn())
         {
-            Debug.Log("Đang rút bài và chuyển lượt...");
-            
-            // Vô hiệu hóa nút rút bài ngay lập tức để tránh nhấn nhiều lần
-            if (drawCardButtonComponent != null)
-            {
-                drawCardButtonComponent.interactable = false;
-            }
-            
-            // Rút bài thông qua CardManager
-            if (CardManager.Instance != null)
-            {
-                // Yêu cầu host xử lý việc rút bài
-                CardManager.Instance.PhotonView.RPC("RPC_RequestDrawCard", RpcTarget.MasterClient, PhotonNetwork.LocalPlayer.ActorNumber);
-                
-                // Không chuyển lượt ngay lập tức - thay vào đó, bắt đầu một coroutine để đợi một khoảng thời gian
-                // Chỉ người chơi hiện tại mới được phép chuyển lượt
-                StartCoroutine(SwitchTurnAfterDelay(1.0f));
-            }
-        }
-        else
-        {
-            Debug.LogWarning("Không phải lượt của bạn! Lượt hiện tại: " + currentTurnIndex + ", lượt của bạn: " + localPlayerIndex);
+            drawCardButtonComponent.interactable = false;
+            CardManager.Instance.PhotonView.RPC("RPC_RequestDrawCard", RpcTarget.MasterClient, PhotonNetwork.LocalPlayer.ActorNumber);
+
+            // Sau khi yêu cầu rút bài, đợi server phản hồi và không làm gì thêm ở đây.
+            // Việc chuyển lượt sẽ được xử lý sau khi rút bài xong.
+            StartCoroutine(ProcessTurnAfterDrawing());
         }
     }
-    
-    private IEnumerator SwitchTurnAfterDelay(float delay)
+
+    private IEnumerator ProcessTurnAfterDrawing()
     {
-        // Đợi một khoảng thời gian
-        yield return new WaitForSeconds(delay);
-        
-        // Chỉ người chơi hiện tại mới được phép chuyển lượt
-        if (currentTurnIndex == localPlayerIndex)
+        // Chờ một chút để RPC rút bài có thời gian thực hiện
+        yield return new WaitForSeconds(0.5f);
+
+        attackTurns--; // Giảm số lượt tấn công còn lại
+
+        if (attackTurns > 0)
         {
-            // Chuyển lượt sang người tiếp theo
+            // Nếu vẫn còn lượt tấn công, không chuyển người, chỉ reset lượt của chính mình
+            photonView.RPC("RPC_StartTurn", RpcTarget.All, currentTurnIndex, attackTurns);
+        }
+        else // Hết lượt, chuyển cho người tiếp theo
+        {
+            // Yêu cầu Master Client chuyển lượt cho người chơi tiếp theo với 1 lượt bình thường
             int nextPlayerIndex = (currentTurnIndex + 1) % playerList.Count;
-            Debug.Log("Chuyển lượt từ " + currentTurnIndex + " sang " + nextPlayerIndex);
-            
-            // Nếu là host, bắt đầu lượt mới cho tất cả mọi người
-            if (PhotonNetwork.IsMasterClient)
-            {
-                StartTurn(nextPlayerIndex);
-            }
-            else
-            {
-                // Người chơi không phải host yêu cầu host chuyển lượt
-                photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex);
-            }
+            photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, 1);
         }
     }
     
     [PunRPC]
-    private void RPC_RequestStartTurn(int nextPlayerIndex)
+    private void RPC_RequestStartTurn(int nextPlayerIndex, int newAttackTurns)
     {
         // Chỉ host xử lý yêu cầu chuyển lượt
         if (PhotonNetwork.IsMasterClient)
         {
-            StartTurn(nextPlayerIndex);
+            StartTurn(nextPlayerIndex, newAttackTurns);
         }
     }
     
-    public void StartTurn(int playerIndex)
+    public void StartTurn(int playerIndex, int newAttackTurns = 1)
     {
-        // Cập nhật lượt hiện tại trước khi gửi RPC
-        currentTurnIndex = playerIndex;
-        
-        // Gửi RPC để đồng bộ lượt trên tất cả client
-        photonView.RPC("RPC_StartTurn", RpcTarget.All, playerIndex);
+        // MasterClient sẽ gọi hàm này và RPC cho tất cả
+        if (PhotonNetwork.IsMasterClient)
+        {
+            photonView.RPC("RPC_StartTurn", RpcTarget.All, playerIndex, newAttackTurns);
+        }
     }
     
     [PunRPC]
-    private void RPC_StartTurn(int playerIndex)
+    private void RPC_StartTurn(int playerIndex, int newAttackTurns)
     {
-        // Cập nhật biến lượt hiện tại
+        // Cập nhật biến lượt và trạng thái attack hiện tại
         currentTurnIndex = playerIndex;
-        
+        attackTurns = newAttackTurns;  
+
         // Lấy thông tin người chơi đang có lượt
         string activePlayerName = "Unknown";
         if (playerIndex >= 0 && playerIndex < playerList.Count)
@@ -409,6 +391,50 @@ public class GameManager : MonoBehaviourPunCallbacks
         {
             int nextPlayerIndex = (currentTurnIndex + 1) % playerList.Count;
             StartTurn(nextPlayerIndex);
+        }
+    }
+
+    public void ProcessAttackPlayed()
+    {
+        if (!IsLocalPlayerTurn()) return;
+
+        int turnsToPass;
+
+        // Kiểm tra xem đây có phải là một lượt tấn công bình thường không
+        if (this.attackTurns <= 1)
+        {
+            // Nếu là lượt bình thường, người tiếp theo chỉ phải chịu 2 lượt.
+            turnsToPass = 2;
+        }
+        else
+        {
+            // Nếu đang bị tấn công sẵn, thực hiện cộng dồn theo yêu cầu.
+            // Ví dụ: đang chịu 2 lượt, đánh Attack -> người sau chịu 2+2=4 lượt.
+            turnsToPass = this.attackTurns + 2;
+        }
+
+        // Yêu cầu bắt đầu lượt cho người chơi tiếp theo với số lượt bị dồn
+        int nextPlayerIndex = (currentTurnIndex + 1) % playerList.Count;
+        photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, turnsToPass);
+    }
+
+    public void ProcessSkipPlayed()
+    {
+        if (!IsLocalPlayerTurn()) return;
+
+        // Giảm số lượt phải chơi đi 1
+        this.attackTurns--;
+
+        if (this.attackTurns > 0)
+        {
+            // Nếu vẫn còn lượt, bắt đầu lại lượt của chính người chơi này với số lượt còn lại
+            photonView.RPC("RPC_StartTurn", RpcTarget.All, this.currentTurnIndex, this.attackTurns);
+        }
+        else
+        {
+            // Nếu đã hết lượt, chuyển cho người chơi tiếp theo với 1 lượt bình thường
+            int nextPlayerIndex = (currentTurnIndex + 1) % playerList.Count;
+            photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, 1);
         }
     }
 } 

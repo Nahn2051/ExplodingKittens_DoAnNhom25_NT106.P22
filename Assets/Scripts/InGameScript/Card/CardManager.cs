@@ -408,4 +408,49 @@ public class CardManager : MonoBehaviour
         // Kiểm tra xem deck có còn bài không
         CheckDeckVisual(remainingDeckCount);
     }
+
+    public List<int> GetTopCards(int count)
+    {
+        // Đảm bảo chỉ có Master Client mới có thể truy cập thông tin này
+        if (!PhotonNetwork.IsMasterClient)
+        {
+            Debug.LogWarning("Chỉ MasterClient mới có thể xem các lá bài trên cùng.");
+            return new List<int>(); // Trả về danh sách rỗng
+        }
+
+        List<int> topCardIndexes = new List<int>();
+
+        // Lấy 'count' lá bài đầu tiên, hoặc ít hơn nếu bộ bài không đủ
+        for (int i = 0; i < count && i < Deck.Count; i++)
+        {
+            CardData cardData = Deck[i];
+            int spriteIndex = GetSpriteIndex(cardData.sprite);
+            topCardIndexes.Add(spriteIndex);
+        }
+
+        return topCardIndexes;
+    }
+
+    [PunRPC]
+    private void RPC_RequestShuffle()
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            ShuffleDeck();
+        }
+    }
+
+    [PunRPC]
+    private void RPC_RequestSeeTheFuture(int requestingPlayerId)
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            List<int> topCardIndexes = GetTopCards(3);
+            Photon.Realtime.Player requestingPlayer = PhotonNetwork.CurrentRoom.GetPlayer(requestingPlayerId);
+            if (requestingPlayer != null)
+            {
+                CardEffectManager.Instance.photonView.RPC("RPC_ReceiveFutureCards", requestingPlayer, (object)topCardIndexes.ToArray());
+            }
+        }
+    }
 }
