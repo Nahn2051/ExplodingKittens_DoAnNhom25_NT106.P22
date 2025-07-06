@@ -60,6 +60,8 @@ MonoBehaviour:
   - RPC_ReceiveFutureCards
   - RPC_RequestSeeTheFuture
   - RPC_RequestShuffle
+  - RPC_RequestFavorCard
+  - RPC_ReceiveFavorCardByName
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

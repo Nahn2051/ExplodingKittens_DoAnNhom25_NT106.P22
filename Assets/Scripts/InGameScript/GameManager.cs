@@ -25,7 +25,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     
     [Header("Game State")]
     [SerializeField] private int currentTurnIndex = 0;
-    [SerializeField] private List<Player> playerList = new List<Player>();
+    [SerializeField] public List<Player> playerList = new List<Player>();
     private int localPlayerIndex = -1;
     private List<PlayerSlot> playerSlots = new List<PlayerSlot>();
     private int lastPlayerDrawCardIndex = -1;

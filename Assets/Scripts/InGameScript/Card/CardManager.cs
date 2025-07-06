@@ -18,7 +18,8 @@ public class CardManager : MonoBehaviour
     private List<CardData> Deck = new List<CardData>();
     private int[] cardQuantities = { 4, 6, 4, 4, 5, 4, 4, 5, 5 };
     private PhotonView photonView;
-    
+    private List<CardData> allCardData = new List<CardData>();
+
     // Public getter cho photonView
     public PhotonView PhotonView => photonView;
     
@@ -99,6 +100,7 @@ public class CardManager : MonoBehaviour
             effect = name,
         };
         Deck.Add(data);
+        allCardData.Add(data);
     }
 
     // Xáo bộ bài - chỉ host thực hiện
@@ -429,6 +431,10 @@ public class CardManager : MonoBehaviour
         }
 
         return topCardIndexes;
+    }
+    public CardData GetCardDataByName(string name)
+    {
+        return allCardData.FirstOrDefault(c => c.cardName == name);
     }
 
     [PunRPC]

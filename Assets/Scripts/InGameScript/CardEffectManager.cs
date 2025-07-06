@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Photon.Pun;
+using System.Linq;
 
 public class CardEffectManager : MonoBehaviourPunCallbacks
 {
@@ -98,13 +99,36 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             GameManager.Instance.ProcessAttackPlayed();
         }
     }
-    
+
     private void HandleFavorEffect(int playerId)
     {
-        Debug.Log($"Xử lý hiệu ứng Favor từ người chơi {playerId}");
-        // TODO: Implement khi game phát triển thêm
+        Debug.Log($"[Favor] Xử lý hiệu ứng Favor từ player {playerId}");
+
+        if (PhotonNetwork.LocalPlayer.ActorNumber != playerId)
+        {
+            Debug.Log("[Favor] Đây không phải lượt của mình.");
+            return;
+        }
+
+        if (FavorTargetSelectUI.Instance == null)
+        {
+            Debug.LogError("FavorTargetSelectUI.Instance vẫn null!");
+            return;
+        }
+
+        FavorTargetSelectUI.Instance.Show(
+            GameManager.Instance.playerList,
+            PhotonNetwork.LocalPlayer.ActorNumber,
+            (targetPlayerId) =>
+            {
+                Debug.Log("[Favor] Đã chọn người chơi có ID: " + targetPlayerId);
+                // Gửi RPC tiếp theo ở đây
+                photonView.RPC("RPC_RequestFavorCard", RpcTarget.All, playerId, targetPlayerId);
+            }
+        );
     }
-    
+
+
     private void HandleNopeEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Nope từ người chơi {playerId}");
@@ -139,6 +163,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         }
     }
 
+
     [PunRPC]
     private void RPC_ReceiveFutureCards(int[] spriteIndexes)
     {
@@ -150,4 +175,53 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             SeeTheFutureUI.Instance.ShowFutureCards(spriteIndexes);
         }
     }
-} 
+    [PunRPC]
+    private void RPC_RequestFavorCard(int fromPlayerId, int toPlayerId)
+    {
+        if (PhotonNetwork.LocalPlayer.ActorNumber == toPlayerId)
+        {
+            FavorGiveCardUI.Instance.Show(
+                CardHolder.Instance.Cards.Select(c => c.data).ToList(),
+                (selectedCardName) =>
+                {
+                    photonView.RPC("RPC_ReceiveFavorCardByName", RpcTarget.All, fromPlayerId, toPlayerId, (string)selectedCardName);
+                });
+        }
+    }
+    [PunRPC]
+    private void RPC_ReceiveFavorCardByName(int fromPlayerId, int toPlayerId, string cardName)
+    {
+        // Người nhận thì xóa lá bài đó khỏi tay
+        if (PhotonNetwork.LocalPlayer.ActorNumber == toPlayerId)
+        {
+            if (CardHolder.Instance != null)
+            {
+                CardHolder.Instance.RemoveCardByName(cardName);
+                CardHolder.Instance.ArrangeCards(); // 👈 Dồn lại bài
+                GameManager.Instance.UpdatePlayerCardCount(); // 👈 Cập nhật số bài
+                Debug.Log($"❌ Đã xóa lá bài {cardName} khỏi người chơi {toPlayerId}");
+            }
+            else
+            {
+                Debug.LogWarning("CardHolder.Instance bị null khi xóa bài!");
+            }
+        }
+
+        // Người tặng thì nhận lá bài đó
+        if (PhotonNetwork.LocalPlayer.ActorNumber == fromPlayerId)
+        {
+            CardData favorCard = CardManager.Instance.GetCardDataByName(cardName);
+            if (favorCard != null && CardHolder.Instance != null)
+            {
+                CardHolder.Instance.AddCard(CardManager.Instance.cardPrefab, favorCard);
+                CardHolder.Instance.ArrangeCards(); // 👈 Sắp xếp lại bài
+                GameManager.Instance.UpdatePlayerCardCount(); // 👈 Cập nhật số bài
+                Debug.Log($"🎁 Người chơi {fromPlayerId} nhận được lá bài {cardName}");
+            }
+            else
+            {
+                Debug.LogWarning($"Không tìm thấy lá bài {cardName} hoặc CardHolder null!");
+            }
+        }
+    }
+}
