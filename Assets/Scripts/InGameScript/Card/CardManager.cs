@@ -205,7 +205,7 @@ public class CardManager : MonoBehaviour
     }
     
     // Lấy index của sprite trong mảng allCardSprites
-    private int GetSpriteIndex(Sprite sprite)
+    public int GetSpriteIndex(Sprite sprite)
     {
         for (int i = 0; i < allCardSprites.Length; i++)
         {

@@ -180,47 +180,56 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.LocalPlayer.ActorNumber == toPlayerId)
         {
-            FavorGiveCardUI.Instance.Show(
-                CardHolder.Instance.Cards.Select(c => c.data).ToList(),
-                (selectedCardName) =>
+            var cards = CardHolder.Instance.Cards.Select(c => c.data).ToList();
+
+            FavorGiveCardUI.Instance.Show(cards, (selectedCardName) =>
+            {
+                CardData selectedCard = cards.FirstOrDefault(c => c.cardName == selectedCardName);
+                if (selectedCard == null)
                 {
-                    photonView.RPC("RPC_ReceiveFavorCardByName", RpcTarget.All, fromPlayerId, toPlayerId, (string)selectedCardName);
-                });
+                    Debug.LogError("❌ Không tìm thấy cardData với tên: " + selectedCardName);
+                    return;
+                }
+
+                int spriteIndex = CardManager.Instance.GetSpriteIndex(selectedCard.sprite);
+                photonView.RPC("RPC_ReceiveFavorCardByData", RpcTarget.All,
+                    fromPlayerId,
+                    toPlayerId,
+                    selectedCard.cardName,
+                    spriteIndex,
+                    selectedCard.effect);
+            });
         }
     }
     [PunRPC]
-    private void RPC_ReceiveFavorCardByName(int fromPlayerId, int toPlayerId, string cardName)
+    private void RPC_ReceiveFavorCardByData(int fromPlayerId, int toPlayerId, string cardName, int spriteIndex, string effect)
     {
-        // Người nhận thì xóa lá bài đó khỏi tay
+        // Người bị yêu cầu: xoá bài
         if (PhotonNetwork.LocalPlayer.ActorNumber == toPlayerId)
         {
             if (CardHolder.Instance != null)
             {
                 CardHolder.Instance.RemoveCardByName(cardName);
-                CardHolder.Instance.ArrangeCards(); // 👈 Dồn lại bài
-                GameManager.Instance.UpdatePlayerCardCount(); // 👈 Cập nhật số bài
-                Debug.Log($"❌ Đã xóa lá bài {cardName} khỏi người chơi {toPlayerId}");
-            }
-            else
-            {
-                Debug.LogWarning("CardHolder.Instance bị null khi xóa bài!");
+                CardHolder.Instance.ArrangeCards();
+                GameManager.Instance?.UpdatePlayerCardCount();
+                Debug.Log($"❌ Người chơi {toPlayerId} đã đưa lá {cardName}");
             }
         }
 
-        // Người tặng thì nhận lá bài đó
+        // Người yêu cầu: nhận bài
         if (PhotonNetwork.LocalPlayer.ActorNumber == fromPlayerId)
         {
-            CardData favorCard = CardManager.Instance.GetCardDataByName(cardName);
-            if (favorCard != null && CardHolder.Instance != null)
+            CardData cardData = new CardData
             {
-                CardHolder.Instance.AddCard(CardManager.Instance.cardPrefab, favorCard);
-                CardHolder.Instance.ArrangeCards(); // 👈 Sắp xếp lại bài
-                GameManager.Instance.UpdatePlayerCardCount(); // 👈 Cập nhật số bài
-                Debug.Log($"🎁 Người chơi {fromPlayerId} nhận được lá bài {cardName}");
-            }
-            else
+                cardName = cardName,
+                sprite = CardManager.Instance.allCardSprites[spriteIndex],
+                effect = effect
+            };
+
+            if (CardHolder.Instance != null)
             {
-                Debug.LogWarning($"Không tìm thấy lá bài {cardName} hoặc CardHolder null!");
+                CardHolder.Instance.AddCard(CardManager.Instance.cardPrefab, cardData);
+                Debug.Log($"🎁 Người chơi {fromPlayerId} đã nhận được lá {cardName}");
             }
         }
     }
