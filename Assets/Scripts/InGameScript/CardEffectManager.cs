@@ -93,6 +93,10 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"Xử lý hiệu ứng Attack từ người chơi {playerId}");
         // TODO: Implement khi game phát triển thêm
+        if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
+        {
+            GameManager.Instance.ProcessAttackPlayed();
+        }
     }
     
     private void HandleFavorEffect(int playerId)
@@ -111,46 +115,39 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"Xử lý hiệu ứng Shuffle từ người chơi {playerId}");
         // TODO: Implement khi game phát triển thêm
-        
-        if (PhotonNetwork.IsMasterClient)
-        {
-            // Xáo bộ bài
-            if (CardManager.Instance != null)
-            {
-                photonView.RPC("RPC_ShuffleDeck", RpcTarget.All);
-            }
-        }
+        // Yêu cầu Master Client xáo bài
+        CardManager.Instance.PhotonView.RPC("RPC_RequestShuffle", RpcTarget.MasterClient);
     }
     
     private void HandleSkipEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Skip từ người chơi {playerId}");
-        
-        if (GameManager.Instance != null && PhotonNetwork.IsMasterClient)
+        if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
-            // Tìm người chơi tiếp theo
-            int currentTurnIndex = GameManager.Instance.GetCurrentTurnIndex();
-            int nextPlayerIndex = (currentTurnIndex + 1) % PhotonNetwork.CurrentRoom.PlayerCount;
-            
-            // Chuyển đến lượt tiếp theo (bỏ qua một lượt)
-            nextPlayerIndex = (nextPlayerIndex + 1) % PhotonNetwork.CurrentRoom.PlayerCount;
-            GameManager.Instance.StartTurn(nextPlayerIndex);
+            GameManager.Instance.ProcessSkipPlayed();
         }
     }
     
-    private void HandleSeeTheFutureEffect(int playerId)
+    private void HandleSeeTheFutureEffect(int activatingPlayerId)
     {
-        Debug.Log($"Xử lý hiệu ứng SeeTheFuture từ người chơi {playerId}");
+        Debug.Log($"Xử lý hiệu ứng SeeTheFuture từ người chơi {activatingPlayerId}");
         // TODO: Implement khi game phát triển thêm
-    }
-    
-    [PunRPC]
-    private void RPC_ShuffleDeck()
-    {
-        if (CardManager.Instance != null)
+        // Chỉ người chơi đã kích hoạt hiệu ứng mới gửi yêu cầu đến MasterClient lấy 3 lá bài trên cùng của bộ bài
+        if (PhotonNetwork.LocalPlayer.ActorNumber == activatingPlayerId)
         {
-            Debug.Log("Xáo trộn bộ bài");
-            // TODO: Implement khi game phát triển thêm
+            CardManager.Instance.PhotonView.RPC("RPC_RequestSeeTheFuture", RpcTarget.MasterClient, activatingPlayerId);
+        }
+    }
+
+    [PunRPC]
+    private void RPC_ReceiveFutureCards(int[] spriteIndexes)
+    {
+        Debug.Log("You see the future! Top cards are: " + string.Join(", ", spriteIndexes));
+
+        //Gọi UI để hiển thị các lá bài
+        if (SeeTheFutureUI.Instance != null)
+        {
+            SeeTheFutureUI.Instance.ShowFutureCards(spriteIndexes);
         }
     }
 } 

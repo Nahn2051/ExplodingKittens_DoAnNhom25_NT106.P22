@@ -5,10 +5,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Firebase.Database;
 
 public class FirebaseLoginManager : MonoBehaviour
 {
     private FirebaseAuth auth;
+    private DatabaseReference dbReference;
 
     [Header("Register Account")]
     public InputField registerEmailInput;
@@ -55,6 +57,7 @@ public class FirebaseLoginManager : MonoBehaviour
     private void Start()
     {
         auth = FirebaseAuth.DefaultInstance;
+        dbReference = FirebaseDatabase.DefaultInstance.RootReference;
 
         // Set default UI panel
         loginPanel.SetActive(true);
@@ -154,7 +157,38 @@ public class FirebaseLoginManager : MonoBehaviour
                 return;
             }
 
-            SceneManager.LoadScene("Main Menu");
+            // 1. Tạo một đường dẫn trong database để lưu trạng thái online của user
+            DatabaseReference sessionRef = dbReference.Child("sessions").Child(user.UserId).Child("isOnline");
+
+            // 2. Kiểm tra xem user này đã online ở nơi khác chưa
+            sessionRef.GetValueAsync().ContinueWithOnMainThread(checkTask =>
+            {
+                if (checkTask.IsFaulted || checkTask.IsCanceled)
+                {
+                    ShowPopup("Failed to check session status.");
+                    auth.SignOut();
+                    return;
+                }
+
+                DataSnapshot snapshot = checkTask.Result;
+                if (snapshot.Exists && (bool)snapshot.Value == true)
+                {
+                    // Nếu đã online -> hiển thị lỗi và đăng xuất
+                    ShowPopup("Account is already logged in elsewhere.");
+                    auth.SignOut();
+                }
+                else
+                {
+                    // Nếu chưa online -> cho phép đăng nhập và cập nhật trạng thái
+                    // Dùng OnDisconnect để tự động set false khi người dùng mất kết nối
+                    sessionRef.OnDisconnect().SetValue(false);
+                    // Đặt trạng thái là true
+                    sessionRef.SetValueAsync(true);
+
+                    // Chuyển đến màn hình Main Menu
+                    SceneManager.LoadScene("Main Menu");
+                }
+            });
         });
     }
 
