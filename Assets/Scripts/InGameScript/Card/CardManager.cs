@@ -55,8 +55,6 @@ public class CardManager : MonoBehaviour
         {40, 40}  // RAINBOW-RALPHING CAT (40-40)
     };
     
-    private List<CardData> allCardData = new List<CardData>();
-
     // Public getter cho photonView
     public PhotonView PhotonView => photonView;
     
@@ -171,7 +169,6 @@ public class CardManager : MonoBehaviour
             effect = name,
         };
         Deck.Add(data);
-        allCardData.Add(data);
     }
 
     // Xáo bộ bài - chỉ host thực hiện
@@ -818,55 +815,6 @@ public class CardManager : MonoBehaviour
         if (deckCardCount != null)
         {
             deckCardCount.text = Deck.Count.ToString();
-        }
-    }
-
-    public List<int> GetTopCards(int count)
-    {
-        // Đảm bảo chỉ có Master Client mới có thể truy cập thông tin này
-        if (!PhotonNetwork.IsMasterClient)
-        {
-            Debug.LogWarning("Chỉ MasterClient mới có thể xem các lá bài trên cùng.");
-            return new List<int>(); // Trả về danh sách rỗng
-        }
-
-        List<int> topCardIndexes = new List<int>();
-
-        // Lấy 'count' lá bài đầu tiên, hoặc ít hơn nếu bộ bài không đủ
-        for (int i = 0; i < count && i < Deck.Count; i++)
-        {
-            CardData cardData = Deck[i];
-            int spriteIndex = GetSpriteIndex(cardData.sprite);
-            topCardIndexes.Add(spriteIndex);
-        }
-
-        return topCardIndexes;
-    }
-    public CardData GetCardDataByName(string name)
-    {
-        return allCardData.FirstOrDefault(c => c.cardName == name);
-    }
-
-    [PunRPC]
-    private void RPC_RequestShuffle()
-    {
-        if (PhotonNetwork.IsMasterClient)
-        {
-            ShuffleDeck();
-        }
-    }
-
-    [PunRPC]
-    private void RPC_RequestSeeTheFuture(int requestingPlayerId)
-    {
-        if (PhotonNetwork.IsMasterClient)
-        {
-            List<int> topCardIndexes = GetTopCards(3);
-            Photon.Realtime.Player requestingPlayer = PhotonNetwork.CurrentRoom.GetPlayer(requestingPlayerId);
-            if (requestingPlayer != null)
-            {
-                CardEffectManager.Instance.photonView.RPC("RPC_ReceiveFutureCards", requestingPlayer, (object)topCardIndexes.ToArray());
-            }
         }
     }
 }
