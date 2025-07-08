@@ -234,7 +234,6 @@ public class CardHolder : MonoBehaviour
             }
         }
     }
-<<<<<<< HEAD
 
     // Method để clean up null references trong danh sách Cards
     public void CleanupNullReferences()
@@ -247,14 +246,14 @@ public class CardHolder : MonoBehaviour
         if (hoveredCard == null || hoveredCard.Equals(null))
             hoveredCard = null;
     }
-
     // Method để check card status an toàn
     public bool ContainsCard(Card card)
     {
         if (card == null) return false;
         CleanupNullReferences();
         return Cards.Contains(card);
-=======
+    }
+    
     public void RemoveCardByName(string cardName)
     {
         Card cardToRemove = Cards.FirstOrDefault(c => c.data.cardName == cardName);
@@ -272,6 +271,7 @@ public class CardHolder : MonoBehaviour
             Debug.LogWarning("⚠️ Không tìm thấy lá bài để xoá: " + cardName);
         }
     }
+    
     public void AddCard(GameObject cardPrefab, CardData data)
     {
         GameObject cardObj = Instantiate(cardPrefab);
@@ -297,6 +297,5 @@ public class CardHolder : MonoBehaviour
         {
             Debug.LogError("❌ Không tìm thấy component Card trong prefab!");
         }
->>>>>>> main
     }
 }

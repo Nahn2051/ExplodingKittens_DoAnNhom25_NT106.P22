@@ -4,11 +4,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using Photon.Pun;
-<<<<<<< HEAD
 using UnityEngine.SceneManagement;
-=======
 using System.Linq;
->>>>>>> main
 
 public class CardEffectManager : MonoBehaviourPunCallbacks
 {
@@ -299,7 +296,6 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     // Các hàm xử lý hiệu ứng
     private void HandleExplodingEffect(int playerId)
     {
-<<<<<<< HEAD
         Debug.Log($"HandleExplodingEffect called for player {playerId}");
         Debug.Log($"Local player ActorNumber: {PhotonNetwork.LocalPlayer.ActorNumber}");
         
@@ -364,9 +360,13 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             }
             
             gameSetUI.ShowPlayerEliminated(message, true);
-=======
-        Debug.Log($"Xử lý hiệu ứng Exploding từ người chơi {playerId}");
-        // TODO: Implement khi game phát triển thêm
+        }
+        
+        // Gửi RPC để loại bỏ player
+        if (PhotonNetwork.IsMasterClient)
+        {
+            photonView.RPC("RPC_EliminatePlayer", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
+        }
     }
     
     private void HandleDefuseEffect(int playerId)
@@ -434,7 +434,6 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
             GameManager.Instance.ProcessSkipPlayed();
->>>>>>> main
         }
         
         // Reset trạng thái exploding
@@ -449,30 +448,6 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         
         // Gửi RPC thông báo player bị loại
         photonView.RPC("RPC_PlayerEliminated", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
-    }
-    
-<<<<<<< HEAD
-    // Placeholder methods cho các hiệu ứng khác
-    private void HandleDefuseEffect(int playerId) { Debug.Log("Defuse effect handled"); }
-    private void HandleAttackEffect(int playerId) { Debug.Log("Attack effect handled"); }
-    private void HandleFavorEffect(int playerId) { Debug.Log("Favor effect handled"); }
-    private void HandleNopeEffect(int playerId) { Debug.Log("Nope effect handled"); }
-    private void HandleShuffleEffect(int playerId) { Debug.Log("Shuffle effect handled"); }
-    private void HandleSkipEffect(int playerId) { Debug.Log("Skip effect handled"); }
-    private void HandleSeeTheFutureEffect(int playerId) 
-    { 
-        Debug.Log("See the future effect handled");
-        
-        // SeeTheFuture effect: Show top 3 cards from deck
-        if (CardManager.Instance != null)
-        {
-            Debug.Log("Processing SeeTheFuture effect - showing top 3 cards");
-            // TODO: Implement actual SeeTheFuture UI
-            // For now just log that effect completed
-        }
-        
-        // Make sure UI remains interactive after effect
-        Debug.Log("SeeTheFuture effect completed, UI should remain interactive");
     }
     
     [PunRPC]
@@ -589,19 +564,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     }
 
     // Event handlers cho UI components
-=======
-    private void HandleSeeTheFutureEffect(int activatingPlayerId)
-    {
-        Debug.Log($"Xử lý hiệu ứng SeeTheFuture từ người chơi {activatingPlayerId}");
-        // TODO: Implement khi game phát triển thêm
-        // Chỉ người chơi đã kích hoạt hiệu ứng mới gửi yêu cầu đến MasterClient lấy 3 lá bài trên cùng của bộ bài
-        if (PhotonNetwork.LocalPlayer.ActorNumber == activatingPlayerId)
-        {
-            CardManager.Instance.PhotonView.RPC("RPC_RequestSeeTheFuture", RpcTarget.MasterClient, activatingPlayerId);
-        }
-    }
-
-
+    
     [PunRPC]
     private void RPC_ReceiveFutureCards(int[] spriteIndexes)
     {
@@ -671,5 +634,20 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             }
         }
     }
->>>>>>> main
+
+    private void HandleSeeTheFutureEffect(int playerId) 
+    { 
+        Debug.Log("See the future effect handled");
+        
+        // SeeTheFuture effect: Show top 3 cards from deck
+        if (CardManager.Instance != null)
+        {
+            Debug.Log("Processing SeeTheFuture effect - showing top 3 cards");
+            // TODO: Implement actual SeeTheFuture UI
+            // For now just log that effect completed
+        }
+        
+        // Make sure UI remains interactive after effect
+        Debug.Log("SeeTheFuture effect completed, UI should remain interactive");
+    }
 }

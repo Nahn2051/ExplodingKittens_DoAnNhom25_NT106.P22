@@ -17,7 +17,6 @@ public class CardManager : MonoBehaviour
 
     private List<CardData> Deck = new List<CardData>();
     private PhotonView photonView;
-<<<<<<< HEAD
     
     // Card quantities based on player count [2,3,4,5 players]
     private int[,] cardQuantitiesByPlayers = {
@@ -56,10 +55,7 @@ public class CardManager : MonoBehaviour
         {40, 40}  // RAINBOW-RALPHING CAT (40-40)
     };
     
-=======
     private List<CardData> allCardData = new List<CardData>();
-
->>>>>>> main
     // Public getter cho photonView
     public PhotonView PhotonView => photonView;
     

@@ -39,40 +39,18 @@ public class FirebaseLoginManager : MonoBehaviour
     private void Start()
     {
         auth = FirebaseAuth.DefaultInstance;
-<<<<<<< HEAD
+        dbReference = FirebaseDatabase.DefaultInstance.RootReference;
+        
         buttonRegister.onClick.AddListener(RegisterAccount);
         buttonLogin.onClick.AddListener(LoginAccount);
         buttonMovetoRegister.onClick.AddListener(MoveToRegister);
         buttonMovetoLogin.onClick.AddListener(MoveToLogin);
         buttonForgotPassword.onClick.AddListener(MoveToForgotPassword);
-=======
-        dbReference = FirebaseDatabase.DefaultInstance.RootReference;
-
-        // Set default UI panel
-        loginPanel.SetActive(true);
-        registerPanel.SetActive(false);
-        forgotPasswordPanel.SetActive(false);
-        // Bind button listeners
-        registerButton.onClick.AddListener(RegisterAccount);
-        loginButton.onClick.AddListener(LoginAccount);
-        sendResetPasswordButton.onClick.AddListener(SendPasswordResetEmail);
-    }
-
-    public void ShowPopup(string message)
-    {
-        popupText.text = message;
-        popupPanel.SetActive(true);
-    }
-
-    public void HidePopup()
-    {
-        popupPanel.SetActive(false);
     }
 
     private bool IsValidEmail(string email)
     {
         return email.Contains("@") && email.Contains(".");
->>>>>>> main
     }
 
     public void RegisterAccount()
@@ -122,17 +100,15 @@ public class FirebaseLoginManager : MonoBehaviour
             // Chuyển cảnh vào game
             SceneManager.LoadScene(sceneName: "Main Menu");
 
-<<<<<<< HEAD
-=======
             // 1. Tạo một đường dẫn trong database để lưu trạng thái online của user
-            DatabaseReference sessionRef = dbReference.Child("sessions").Child(user.UserId).Child("isOnline");
+            DatabaseReference sessionRef = dbReference.Child("sessions").Child(newUser.UserId).Child("isOnline");
 
             // 2. Kiểm tra xem user này đã online ở nơi khác chưa
             sessionRef.GetValueAsync().ContinueWithOnMainThread(checkTask =>
             {
                 if (checkTask.IsFaulted || checkTask.IsCanceled)
                 {
-                    ShowPopup("Failed to check session status.");
+                    Debug.LogError("Failed to check session status.");
                     auth.SignOut();
                     return;
                 }
@@ -141,7 +117,7 @@ public class FirebaseLoginManager : MonoBehaviour
                 if (snapshot.Exists && (bool)snapshot.Value == true)
                 {
                     // Nếu đã online -> hiển thị lỗi và đăng xuất
-                    ShowPopup("Account is already logged in elsewhere.");
+                    Debug.LogError("Account is already logged in elsewhere.");
                     auth.SignOut();
                 }
                 else
@@ -156,7 +132,6 @@ public class FirebaseLoginManager : MonoBehaviour
                     SceneManager.LoadScene("Main Menu");
                 }
             });
->>>>>>> main
         });
     }
     public void MoveToRegister()
