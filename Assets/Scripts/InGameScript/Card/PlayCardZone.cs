@@ -3,41 +3,358 @@ using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine.UI;
 using System.Collections;
+using UnityEngine.EventSystems;
 
-public class PlayCardZone : MonoBehaviour
+public class PlayCardZone : MonoBehaviour, IDropHandler
 {
     public List<Card> playedCards = new List<Card>();
     public CardHolder handHolder;
+    public NormalCardComboUI normalCardComboUI; // Reference to combo UI
+    
+    // Biến để lưu trữ các thẻ được chọn cho combo
+    private List<Card> selectedComboCards = new List<Card>();
+
+    // Safety flag để tránh duplicate processing
+    private bool isProcessingCard = false;
+    
+    private void OnEnable()
+    {
+        Debug.Log("PlayCardZone OnEnable - Ready to receive cards");
+    }
+
+    private void OnDisable()
+    {
+        Debug.Log("PlayCardZone OnDisable - Stopping card processing");
+        isProcessingCard = false;
+    }
+    
+    public void OnDrop(PointerEventData eventData)
+    {
+        // Safety check để tránh duplicate processing
+        if (isProcessingCard) 
+        {
+            Debug.Log("Already processing a card, ignoring OnDrop");
+            return;
+        }
+
+        // Kiểm tra nếu exploding đang diễn ra
+        if (CardEffectManager.IsExplodingInProgress)
+        {
+            Debug.Log("Cannot play cards to PlayZone while someone is handling Exploding!");
+            return;
+        }
+
+        if (!GameManager.Instance.IsLocalPlayerTurn())
+        {
+            Debug.Log("Cannot play cards - not your turn!");
+            return;
+        }
+
+        GameObject draggedObject = eventData.pointerDrag;
+        if (draggedObject != null)
+        {
+            Card draggedCard = draggedObject.GetComponent<Card>();
+            if (draggedCard != null)
+            {
+                // VALIDATE CARD FIRST - TRƯỚC KHI SET PROCESSING FLAG
+                if (!IsCardValidForPlayZone(draggedCard))
+                {
+                    Debug.LogWarning($"Card {draggedCard.data.cardName} ({draggedCard.data.effect}) is not valid for PlayZone!");
+                    return;
+                }
+
+                isProcessingCard = true; // Set flag AFTER validation
+                
+                try 
+                {
+                    // Kiểm tra xem có combo đang được chọn không
+                    if (selectedComboCards.Count > 0)
+                    {
+                        // Nếu drag card không phải là part of combo, thêm vào combo
+                        if (!selectedComboCards.Contains(draggedCard))
+                        {
+                            selectedComboCards.Add(draggedCard);
+                            draggedCard.selected = true;
+                            draggedCard.UpdateComboSelectionVisual();
+                        }
+                        
+                        // Validate combo trước khi thực hiện
+                        if (IsValidCombo(selectedComboCards))
+                        {
+                            HandleComboPlay();
+                        }
+                        else
+                        {
+                            Debug.LogWarning("Invalid combo after adding dragged card!");
+                            ResetComboSelection();
+                        }
+                    }
+                    else
+                    {
+                        // Single card - check loại card
+                        if (IsActionCard(draggedCard.data.effect))
+                        {
+                            // Action cards có thể chơi đơn lẻ
+                            PlaySingleCard(draggedCard);
+                        }
+                        else if (IsNormalCard(draggedCard.data.effect))
+                        {
+                            // Normal cards KHÔNG thể chơi đơn lẻ
+                            Debug.LogWarning($"Normal card {draggedCard.data.effect} cannot be played alone! Must be played in combos (2-3 cards).");
+                            // Có thể show UI message để user hiểu
+                            return;
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"Card {draggedCard.data.effect} cannot be played individually!");
+                        }
+                    }
+                }
+                finally
+                {
+                    // Always reset flag
+                    StartCoroutine(ResetProcessingFlag());
+                }
+            }
+        }
+    }
 
     public void PlayCard(Card card)
     {
+        // Safety check để tránh duplicate processing
+        if (isProcessingCard) 
+        {
+            Debug.Log("Already processing a card, ignoring PlayCard");
+            return;
+        }
+        
+        // Method này bây giờ chỉ để select combo cards
+        if (card == null || card.Equals(null)) return;
+        
+        // Clean up null references first
+        selectedComboCards.RemoveAll(c => c == null || c.Equals(null));
+        
         if (playedCards.Contains(card)) return;
+        
+        // Kiểm tra nếu exploding đang diễn ra
+        if (CardEffectManager.IsExplodingInProgress)
+        {
+            Debug.Log("Cannot play cards while someone is handling Exploding!");
+            return;
+        }
 
         if (GameManager.Instance != null && GameManager.Instance.IsLocalPlayerTurn())
         {
-            playedCards.Add(card);
-            card.isDragging = false;
-            card.isHovering = false;
-            card.selected = false;
-            card.isPlayed = true;
-
-            card.GetComponent<UnityEngine.UI.Image>().raycastTarget = false;
-            card.GetComponent<CanvasGroup>().blocksRaycasts = false;
-            handHolder.RemoveCard(card);
-
-            if (CardManager.Instance != null)
+            // Kiểm tra nếu là normal card
+            if (IsNormalCard(card.data.effect))
             {
-                CardManager.Instance.PlayCard(card, Photon.Pun.PhotonNetwork.LocalPlayer.ActorNumber);
+                // Normal cards chỉ được select cho combo, không được chơi đơn
+                // Toggle selection cho combo
+                if (selectedComboCards.Contains(card))
+                {
+                    // Unselect card
+                    selectedComboCards.Remove(card);
+                    card.selected = false;
+                    card.UpdateComboSelectionVisual();
+                    Debug.Log($"Unselected card {card.data.effect}. Remaining: {selectedComboCards.Count}");
+                }
+                else
+                {
+                    // Select card for combo
+                    selectedComboCards.Add(card);
+                    card.selected = true;
+                    card.UpdateComboSelectionVisual();
+                    Debug.Log($"Selected card {card.data.effect} for combo. Total: {selectedComboCards.Count}");
+                }
+                return;
+            }
+            
+            // VALIDATE before processing action cards
+            if (!IsCardValidForPlayZone(card))
+            {
+                Debug.LogWarning($"Card {card.data.cardName} is not valid for PlayZone!");
+                return;
+            }
+            
+            // Set processing flag
+            isProcessingCard = true;
+            
+            try 
+            {
+                // Chơi action card ngay lập tức
+                PlaySingleCard(card);
+            }
+            finally
+            {
+                StartCoroutine(ResetProcessingFlag());
             }
         }
         else
         {
-            Debug.Log("Không thể chơi bài - chưa đến lượt của bạn!");
+            Debug.Log("Cannot play cards - not your turn!");
+        }
+    }
+    
+    private void HandleComboPlay()
+    {
+        // Validate combo
+        if (!IsValidCombo(selectedComboCards))
+        {
+            Debug.LogWarning("Invalid combo! Cannot execute.");
+            ShowComboErrorMessage();
+            ResetComboSelection();
+            return;
+        }
+
+        Debug.Log($"Executing combo: {selectedComboCards.Count} cards of {selectedComboCards[0].data.effect}");
+        
+        // Send combo to CardEffectManager for UI handling
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HandleNormalCardCombo(new List<Card>(selectedComboCards));
+        }
+        
+        // Play all combo cards through CardManager
+        List<Card> cardsToPlay = new List<Card>(selectedComboCards);
+        ResetComboSelection(); // Reset first to prevent conflicts
+        
+        foreach (Card card in cardsToPlay)
+        {
+            PlaySingleCard(card);
+        }
+    }
+
+    private bool IsValidCombo(List<Card> cards)
+    {
+        if (cards.Count < 2 || cards.Count > 3) return false;
+        
+        // Kiểm tra tất cả cards có cùng loại không
+        string firstCardType = cards[0].data.effect;
+        foreach (Card card in cards)
+        {
+            if (card.data.effect != firstCardType || !IsNormalCard(card.data.effect))
+            {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    private void ShowComboErrorMessage()
+    {
+        // Hiển thị thông báo lỗi combo
+        Debug.LogWarning("Invalid combo: Must have 2-3 Normal cards of the same type!");
+    }
+
+    private bool IsNormalCard(string cardType)
+    {
+        return cardType == "HairyPotatoCat" || cardType == "BeardCat" || 
+               cardType == "Cattermelon" || cardType == "Tacocat" || 
+               cardType == "RainbowRalphingCat";
+    }
+
+    private void CheckCombo()
+    {
+        if (selectedComboCards.Count < 2) return;
+        
+        // Kiểm tra tất cả các thẻ có cùng loại không
+        string firstCardType = selectedComboCards[0].data.effect;
+        bool allSameType = true;
+        
+        foreach (Card card in selectedComboCards)
+        {
+            if (card.data.effect != firstCardType)
+            {
+                allSameType = false;
+                break;
+            }
+        }
+        
+        if (allSameType && (selectedComboCards.Count == 2 || selectedComboCards.Count == 3))
+        {
+            // Combo hợp lệ - thực hiện
+            ExecuteCombo();
+        }
+        else if (selectedComboCards.Count > 3)
+        {
+            Debug.LogWarning("Can only combo up to 3 cards!");
+            ResetComboSelection();
+        }
+        else if (!allSameType)
+        {
+            Debug.LogWarning("All cards in combo must be of the same type!");
+            ResetComboSelection();
+        }
+    }
+
+    private void ExecuteCombo()
+    {
+        Debug.Log($"Thực hiện combo {selectedComboCards.Count} thẻ {selectedComboCards[0].data.effect}");
+        
+        // Gửi combo đến CardEffectManager
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HandleNormalCardCombo(new List<Card>(selectedComboCards));
+        }
+        
+        // Xóa thẻ khỏi tay người chơi và thêm vào PlayZone
+        foreach (Card card in selectedComboCards)
+        {
+            PlaySingleCard(card);
+        }
+        
+        // Reset combo selection
+        ResetComboSelection();
+    }
+    
+    private void ResetComboSelection()
+    {
+        foreach (Card card in selectedComboCards)
+        {
+            if (card != null)
+            {
+                card.selected = false;
+                card.UpdateComboSelectionVisual();
+            }
+        }
+        selectedComboCards.Clear();
+    }
+    
+    private void PlaySingleCard(Card card)
+    {
+        if (card == null) return;
+        
+        // Kiểm tra card đã được played chưa
+        if (card.isPlayed || playedCards.Contains(card)) 
+        {
+            Debug.Log($"Card {card.data.cardName} already played, skipping");
+            return;
+        }
+        
+        // CHECK: Chỉ Action cards hoặc combo cards được phép play
+        if (!IsActionCard(card.data.effect) && !IsNormalCard(card.data.effect))
+        {
+            Debug.LogWarning($"Card {card.data.effect} cannot be played!");
+            return;
+        }
+        
+        Debug.Log($"Playing single card: {card.data.cardName}");
+        
+        // Send to CardManager for processing (CardManager sẽ handle removal và marking)
+        if (CardManager.Instance != null)
+        {
+            CardManager.Instance.PlayCard(card, Photon.Pun.PhotonNetwork.LocalPlayer.ActorNumber);
         }
     }
 
     public void AddPlayedCard(Card card, int playerActorNumber)
     {
+        Debug.Log($"PlayCardZone.AddPlayedCard: Adding {card.data.cardName} for player {playerActorNumber}");
+        
+        if (card == null) return;
+        
+        // Prevent duplicate additions
         if (playedCards.Contains(card)) return;
 
         playedCards.Add(card);
@@ -60,14 +377,17 @@ public class PlayCardZone : MonoBehaviour
         
         card.GetComponent<UnityEngine.UI.Image>().enabled = true;
 
-        Debug.Log($"Người chơi {playerActorNumber} đã chơi thẻ {card.data.cardName}: {card.data.effect}");
+        Debug.Log($"Player {playerActorNumber} played card {card.data.cardName}: {card.data.effect}");
+        Debug.Log($"PlayCardZone.AddPlayedCard: Visual setup complete, starting effect animation");
 
         StartCoroutine(ShowCardEffectAnimation(card.data.effect));
     }
 
     private IEnumerator ShowCardEffectAnimation(string effectType)
     {
+        Debug.Log($"PlayCardZone.ShowCardEffectAnimation: Starting animation for {effectType}");
         yield return new WaitForSeconds(1f);
+        Debug.Log($"PlayCardZone.ShowCardEffectAnimation: Animation completed for {effectType}, UI should be fully interactive");
     }
 
     public void ClearPlayZone()
@@ -77,5 +397,158 @@ public class PlayCardZone : MonoBehaviour
             Destroy(card.transform.parent.gameObject);
         }
         playedCards.Clear();
+    }
+
+    // Method để reset combo selection từ bên ngoài
+    public void ResetComboSelectionPublic()
+    {
+        ResetComboSelection();
+    }
+    
+    // Method để kiểm tra có combo đang được chọn không
+    public bool HasSelectedCombo()
+    {
+        return selectedComboCards.Count > 0;
+    }
+    
+    // Method để lấy số lượng thẻ đã chọn cho combo
+    public int GetSelectedComboCount()
+    {
+        return selectedComboCards.Count;
+    }
+
+    // Public method để execute combo từ UI (khi player đã chọn target)
+    public void ExecuteSelectedCombo()
+    {
+        if (selectedComboCards.Count >= 2 && selectedComboCards.Count <= 3)
+        {
+            HandleComboPlay();
+        }
+        else
+        {
+            Debug.LogWarning("Invalid combo size for execution!");
+            ResetComboSelection();
+        }
+    }
+    
+    // Public method để cancel combo selection
+    public void CancelComboSelection()
+    {
+        Debug.Log("Canceling combo selection");
+        ResetComboSelection();
+    }
+
+    private void Update()
+    {
+        // Clean up null references periodically
+        CleanupNullReferences();
+        
+        // Right-click để hủy combo selection
+        if (Input.GetMouseButtonDown(1) && selectedComboCards.Count > 0)
+        {
+            Debug.Log("Canceling combo selection");
+            ResetComboSelection();
+        }
+    }
+
+    // Method để cleanup null references an toàn
+    public void CleanupNullReferences()
+    {
+        selectedComboCards.RemoveAll(card => card == null || card.Equals(null));
+        playedCards.RemoveAll(card => card == null || card.Equals(null));
+    }
+
+    private IEnumerator ResetProcessingFlag()
+    {
+        yield return new WaitForEndOfFrame();
+        isProcessingCard = false;
+        Debug.Log("PlayCardZone: Processing flag reset, UI should be interactive again");
+    }
+
+    // Method để validate xem card có thể được chơi vào PlayZone không
+    private bool IsCardValidForPlayZone(Card card)
+    {
+        if (card == null || card.data == null) return false;
+        
+        string cardEffect = card.data.effect;
+        
+        // 1. Defuse chỉ được dùng để gỡ bom, KHÔNG được kéo vào PlayZone
+        if (cardEffect == "Defuse")
+        {
+            Debug.LogWarning("Defuse cards can only be used to defuse bombs, not played in PlayZone!");
+            return false;
+        }
+        
+        // 2. Exploding Kitten KHÔNG BAO GIỜ được chơi
+        if (cardEffect == "Exploding")
+        {
+            Debug.LogWarning("Exploding Kitten cannot be played!");
+            return false;
+        }
+        
+        // 3. Normal cards - cần special handling
+        if (IsNormalCard(cardEffect))
+        {
+            // Normal cards chỉ được phép nếu đang có combo selection
+            if (selectedComboCards.Count > 0)
+            {
+                // Đang có combo - check xem card này có cùng loại với combo không
+                string comboType = selectedComboCards[0].data.effect;
+                if (cardEffect != comboType)
+                {
+                    Debug.LogWarning($"Card {cardEffect} doesn't match combo type {comboType}!");
+                    return false;
+                }
+                
+                // Check số lượng combo không vượt quá 3
+                if (selectedComboCards.Count >= 3 && !selectedComboCards.Contains(card))
+                {
+                    Debug.LogWarning("Combo cannot have more than 3 cards!");
+                    return false;
+                }
+                
+                return true;
+            }
+            else
+            {
+                // Normal card đơn lẻ KHÔNG được phép kéo vào PlayZone
+                Debug.LogWarning("Normal cards must be played in combos (2-3 cards of same type), not individually!");
+                return false;
+            }
+        }
+        
+        // 4. Action cards - có thể chơi đơn lẻ
+        if (IsActionCard(cardEffect))
+        {
+            return true;
+        }
+        
+        // 5. Unknown card type
+        Debug.LogWarning($"Unknown card type: {cardEffect}");
+        return false;
+    }
+    
+    private bool CanAddToCombo(Card card)
+    {
+        if (selectedComboCards.Count == 0) return true; // No combo yet
+        
+        // Check same card type
+        string comboType = selectedComboCards[0].data.effect;
+        if (card.data.effect != comboType) return false;
+        
+        // Check max combo size
+        if (selectedComboCards.Count >= 3) return false;
+        
+        // Check not already in combo
+        if (selectedComboCards.Contains(card)) return false;
+        
+        return true;
+    }
+
+    // Method để check xem có phải action card không
+    private bool IsActionCard(string cardType)
+    {
+        return cardType == "Favor" || cardType == "Nope" || cardType == "Shuffle" || 
+               cardType == "Skip" || cardType == "SeeTheFuture" || cardType == "Attack";
     }
 }

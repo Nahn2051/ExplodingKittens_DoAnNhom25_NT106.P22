@@ -12,7 +12,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     public static GameManager Instance;
     
     [Header("Game Settings")]
-    [SerializeField] private int initialCardCount = 5;
+    [SerializeField] private int initialCardCount = 5; // 1 Defuse + 4 other cards (no Exploding)
     
     [Header("UI References")]
     [SerializeField] private GameObject playerSlotPrefab;
@@ -28,6 +28,12 @@ public class GameManager : MonoBehaviourPunCallbacks
     private int localPlayerIndex = -1;
     private List<PlayerSlot> playerSlots = new List<PlayerSlot>();
     private int lastPlayerDrawCardIndex = -1;
+    
+    [Header("Player Management")]
+    private List<int> eliminatedPlayerIds = new List<int>();
+    
+    [Header("Turn Management")]
+    private bool isExplodingInProgress = false;
     
     private void Awake()
     {
@@ -93,13 +99,10 @@ public class GameManager : MonoBehaviourPunCallbacks
             }
         }
         
-        // Nếu là master client, bắt đầu game và xáo bài
+        // Nếu là master client, bắt đầu game và chia bài
         if (PhotonNetwork.IsMasterClient)
         {
-            // Xáo bộ bài
-            photonView.RPC("RPC_ShuffleDeck", RpcTarget.AllBuffered);
-            
-            // Chia bài cho tất cả người chơi
+            // Chia bài đặc biệt cho tất cả người chơi (1 Defuse + 4 lá khác)
             photonView.RPC("RPC_DealInitialCards", RpcTarget.AllBuffered);
             
             // Bắt đầu lượt đầu tiên
@@ -114,60 +117,48 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         playerSlots.Clear();
         
-        for (int i = 0; i < playerList.Count; i++)
+        // Tạo danh sách người chơi theo thứ tự lượt chơi (bắt đầu từ người chơi tiếp theo của local player)
+        List<Player> orderedPlayers = new List<Player>();
+        
+        // Bắt đầu từ người chơi tiếp theo của local player
+        for (int i = 1; i < playerList.Count; i++)
         {
-            if (i != localPlayerIndex) // Không tạo slot cho người chơi local
-            {
-                Player player = playerList[i];
-                
-                GameObject slotObject = Instantiate(playerSlotPrefab, playerSlotsContainer);
-                PlayerSlot playerSlot = slotObject.GetComponent<PlayerSlot>();
-                
-                if (playerSlot != null)
-                {
-                    // Lấy thông tin avatar
-                    int avatarIndex = 0;
-                    if (player.CustomProperties.ContainsKey("AvatarIndex"))
-                    {
-                        avatarIndex = (int)player.CustomProperties["AvatarIndex"];
-                    }
-                    
-                    // Thiết lập thông tin player slot
-                    playerSlot.Initialize(player.NickName, avatarIndex, player.ActorNumber);
-                    playerSlots.Add(playerSlot);
-                }
-            }
+            int playerIndex = (localPlayerIndex + i) % playerList.Count;
+            orderedPlayers.Add(playerList[playerIndex]);
         }
-    }
-    
-    [PunRPC]
-    private void RPC_ShuffleDeck()
-    {
-        // Kiểm tra trường hợp đã có CardManager trong scene
-        if (CardManager.Instance != null)
+        
+        // Tạo slot cho mỗi người chơi theo thứ tự đã sắp xếp
+        foreach (Player player in orderedPlayers)
         {
-            Debug.Log("Xáo bài ở đầu game");
+            GameObject slotObject = Instantiate(playerSlotPrefab, playerSlotsContainer);
+            PlayerSlot playerSlot = slotObject.GetComponent<PlayerSlot>();
+            
+            if (playerSlot != null)
+            {
+                // Lấy thông tin avatar
+                int avatarIndex = 0;
+                if (player.CustomProperties.ContainsKey("AvatarIndex"))
+                {
+                    avatarIndex = (int)player.CustomProperties["AvatarIndex"];
+                }
+                
+                // Thiết lập thông tin player slot
+                playerSlot.Initialize(player.NickName, avatarIndex, player.ActorNumber);
+                playerSlots.Add(playerSlot);
+            }
         }
     }
     
     [PunRPC]
     private void RPC_DealInitialCards()
     {
-        Debug.Log("Phát " + initialCardCount + " lá bài cho mỗi người chơi");
+        Debug.Log("Phát bài đặc biệt: mỗi người 1 Defuse + 4 lá khác (không có Exploding)");
         
         // Chỉ có master client phát bài để đồng bộ
         if (PhotonNetwork.IsMasterClient && CardManager.Instance != null)
         {
-            // Kiểm tra xem bộ bài có đủ bài để phát không
-            int totalCardsNeeded = playerList.Count * initialCardCount;
-            if (CardManager.Instance.GetDeckCount() < totalCardsNeeded)
-            {
-                Debug.LogError($"Không đủ bài để phát! Cần {totalCardsNeeded} lá nhưng chỉ có {CardManager.Instance.GetDeckCount()} lá.");
-                return;
-            }
-            
-            // Thực hiện phát bài ban đầu
-            CardManager.Instance.DealInitialCards(playerList, initialCardCount);
+            // Sử dụng phương thức phát bài đặc biệt
+            CardManager.Instance.DealInitialCardsSpecial(playerList);
         }
     }
     
@@ -197,7 +188,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         }
         else
         {
-            Debug.LogWarning("Không phải lượt của bạn! Lượt hiện tại: " + currentTurnIndex + ", lượt của bạn: " + localPlayerIndex);
+            Debug.LogWarning("Not your turn! Current turn: " + currentTurnIndex + ", your turn: " + localPlayerIndex);
         }
     }
     
@@ -206,11 +197,18 @@ public class GameManager : MonoBehaviourPunCallbacks
         // Đợi một khoảng thời gian
         yield return new WaitForSeconds(delay);
         
+        // Kiểm tra nếu có exploding đang diễn ra thì không chuyển lượt
+        if (isExplodingInProgress)
+        {
+            Debug.Log("Exploding đang diễn ra, không chuyển lượt");
+            yield break;
+        }
+        
         // Chỉ người chơi hiện tại mới được phép chuyển lượt
         if (currentTurnIndex == localPlayerIndex)
         {
-            // Chuyển lượt sang người tiếp theo
-            int nextPlayerIndex = (currentTurnIndex + 1) % playerList.Count;
+            // Tìm người chơi tiếp theo chưa bị loại
+            int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
             Debug.Log("Chuyển lượt từ " + currentTurnIndex + " sang " + nextPlayerIndex);
             
             // Nếu là host, bắt đầu lượt mới cho tất cả mọi người
@@ -224,6 +222,29 @@ public class GameManager : MonoBehaviourPunCallbacks
                 photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex);
             }
         }
+    }
+    
+    // Tìm người chơi tiếp theo chưa bị loại
+    public int GetNextAlivePlayerIndex(int currentIndex)
+    {
+        int nextIndex = currentIndex;
+        int attempts = 0;
+        int maxAttempts = playerList.Count;
+        
+        do
+        {
+            nextIndex = (nextIndex + 1) % playerList.Count;
+            attempts++;
+            
+            // Tránh vòng lặp vô hạn
+            if (attempts >= maxAttempts)
+            {
+                break;
+            }
+        }
+        while (IsPlayerEliminated(playerList[nextIndex].ActorNumber));
+        
+        return nextIndex;
     }
     
     [PunRPC]
@@ -408,4 +429,194 @@ public class GameManager : MonoBehaviourPunCallbacks
             StartTurn(nextPlayerIndex);
         }
     }
-} 
+    
+    // Player Management
+    
+    // Thêm phương thức kiểm tra player còn sống
+    public bool IsPlayerEliminated(int playerId)
+    {
+        return eliminatedPlayerIds.Contains(playerId);
+    }
+    
+    // Thêm phương thức loại bỏ player
+    public void EliminatePlayer(int playerId)
+    {
+        if (!IsPlayerEliminated(playerId))
+        {
+            eliminatedPlayerIds.Add(playerId);
+            Debug.Log($"Player {playerId} đã bị loại bỏ");
+            
+            // Tìm và update UI của player bị loại
+            UpdateEliminatedPlayerUI(playerId);
+            
+            // Kiểm tra winner - quan trọng phải gọi sau khi cập nhật danh sách
+            CheckForWinner();
+            
+            // Nếu game chưa kết thúc, tiếp tục chuyển lượt
+            if (!IsGameEnded())
+            {
+                // Chuyển lượt nếu người bị loại đang có lượt
+                if (GetCurrentPlayerActorNumber() == playerId && PhotonNetwork.IsMasterClient)
+                {
+                    int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
+                    StartTurn(nextPlayerIndex);
+                }
+            }
+        }
+    }
+    
+    // Update UI cho player bị loại
+    private void UpdateEliminatedPlayerUI(int playerId)
+    {
+        foreach (PlayerSlot slot in playerSlots)
+        {
+            if (slot.PlayerActorNumber == playerId)
+            {
+                slot.SetEliminatedState(true);
+                Debug.Log($"Player {playerId} UI marked as eliminated");
+                break;
+            }
+        }
+    }
+    
+    // Kiểm tra game đã kết thúc chưa
+    private bool IsGameEnded()
+    {
+        int alivePlayers = 0;
+        foreach (Player player in PhotonNetwork.PlayerList)
+        {
+            if (!IsPlayerEliminated(player.ActorNumber))
+            {
+                alivePlayers++;
+            }
+        }
+        return alivePlayers <= 1;
+    }
+    
+    // Lấy ActorNumber của player hiện tại
+    private int GetCurrentPlayerActorNumber()
+    {
+        if (currentTurnIndex >= 0 && currentTurnIndex < playerList.Count)
+        {
+            return playerList[currentTurnIndex].ActorNumber;
+        }
+        return -1;
+    }
+    
+    // Kiểm tra winner
+    private void CheckForWinner()
+    {
+        int alivePlayers = 0;
+        Player winner = null;
+        List<Player> alivePlayersList = new List<Player>();
+        
+        // Đếm số người chơi còn sống
+        foreach (Player player in PhotonNetwork.PlayerList)
+        {
+            if (!IsPlayerEliminated(player.ActorNumber))
+            {
+                alivePlayers++;
+                winner = player;
+                alivePlayersList.Add(player);
+            }
+        }
+        
+        Debug.Log($"CheckForWinner: {alivePlayers} players alive");
+        
+        // Kiểm tra điều kiện thắng
+        if (alivePlayers <= 1)
+        {
+            if (winner != null)
+            {
+                Debug.Log($"Game Over! Winner: {winner.NickName}");
+                // Thông báo winner cho tất cả người chơi
+                photonView.RPC("RPC_AnnounceWinner", RpcTarget.All, winner.NickName);
+            }
+            else
+            {
+                Debug.Log("Game Over! No winner (all players eliminated)");
+                // Trường hợp đặc biệt: không có ai thắng
+                photonView.RPC("RPC_AnnounceWinner", RpcTarget.All, "No One");
+            }
+            
+            // Dừng game
+            EndGame();
+        }
+        else if (alivePlayers == 0)
+        {
+            Debug.Log("Game Over! All players eliminated - Draw game");
+            photonView.RPC("RPC_AnnounceWinner", RpcTarget.All, "Draw");
+            EndGame();
+        }
+    }
+    
+    // Kết thúc game
+    private void EndGame()
+    {
+        Debug.Log("Game ended. Disabling gameplay.");
+        
+        // Vô hiệu hóa draw card button
+        if (drawCardButtonComponent != null)
+        {
+            drawCardButtonComponent.interactable = false;
+        }
+        
+        // Dừng tất cả turn management
+        isExplodingInProgress = true; // Tạm dừng turn switching
+        
+        // Có thể thêm logic khác như disable UI, save stats, etc.
+    }
+    
+    [PunRPC]
+    private void RPC_AnnounceWinner(string winnerName)
+    {
+        Debug.Log($"Winner: {winnerName}");
+        if (CardEffectManager.Instance != null)
+        {
+            // Gọi method ShowWinner từ CardEffectManager
+            CardEffectManager.Instance.photonView.RPC("RPC_ShowWinner", RpcTarget.All, winnerName);
+        }
+    }
+    
+    // Phương thức để set trạng thái exploding
+    public void SetExplodingInProgress(bool inProgress)
+    {
+        isExplodingInProgress = inProgress;
+    }
+
+    // Public method để test việc phát bài đặc biệt
+    public void TestSpecialCardDealing()
+    {
+        if (PhotonNetwork.IsMasterClient && CardManager.Instance != null)
+        {
+            Debug.Log("=== TESTING SPECIAL CARD DEALING ===");
+            CardManager.Instance.LogDeckComposition();
+            CardManager.Instance.DealInitialCardsSpecial(playerList);
+            Debug.Log("=== AFTER DEALING CARDS ===");
+            CardManager.Instance.LogDeckComposition();
+        }
+    }
+
+    // Public method để force check winner (for testing)
+    public void ForceCheckWinner()
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            CheckForWinner();
+        }
+    }
+    
+    // Public method để get số players còn sống
+    public int GetAlivePlayersCount()
+    {
+        int count = 0;
+        foreach (Player player in PhotonNetwork.PlayerList)
+        {
+            if (!IsPlayerEliminated(player.ActorNumber))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+}

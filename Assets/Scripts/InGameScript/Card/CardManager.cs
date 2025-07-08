@@ -16,8 +16,44 @@ public class CardManager : MonoBehaviour
     [SerializeField] private PlayCardZone playCardZone;
 
     private List<CardData> Deck = new List<CardData>();
-    private int[] cardQuantities = { 4, 6, 4, 4, 5, 4, 4, 5, 5 };
     private PhotonView photonView;
+    
+    // Card quantities based on player count [2,3,4,5 players]
+    private int[,] cardQuantitiesByPlayers = {
+        {1, 2, 3, 4},  // EXPLODING KITTEN
+        {3, 4, 6, 7},  // DEFUSE
+        {3, 4, 5, 6},  // ATTACK (2X)
+        {1, 2, 4, 6},  // FAVOR
+        {2, 3, 4, 5},  // NOPE
+        {2, 3, 4, 5},  // SHUFFLE
+        {3, 3, 4, 6},  // SKIP
+        {3, 4, 4, 5},  // SEE THE FUTURE (3X)
+        {4, 4, 4, 4},  // HAIRY POTATO CAT
+        {0, 4, 4, 4},  // BEARD CAT
+        {0, 0, 4, 4},  // CATTERMELON
+        {4, 4, 4, 4},  // TACOCAT
+        {4, 4, 4, 4}   // RAINBOW-RALPHING CAT
+    };
+    
+    // Sprite indices for each card type - base indices
+    private int[] cardSpriteIndices = {0, 4, 10, 14, 18, 23, 27, 31, 36, 37, 38, 39, 40};
+    
+    // Sprite ranges for each card type [start, end] - for cards that need different sprites
+    private int[,] cardSpriteRanges = {
+        {0, 3},   // EXPLODING KITTEN (0-3)
+        {4, 9},   // DEFUSE (4-9)
+        {10, 13}, // ATTACK (10-13)
+        {14, 17}, // FAVOR (14-17)
+        {18, 22}, // NOPE (18-22)
+        {23, 26}, // SHUFFLE (23-26)
+        {27, 30}, // SKIP (27-30)
+        {31, 35}, // SEE THE FUTURE (31-35)
+        {36, 36}, // HAIRY POTATO CAT (36-36)
+        {37, 37}, // BEARD CAT (37-37)
+        {38, 38}, // CATTERMELON (38-38)
+        {39, 39}, // TACOCAT (39-39)
+        {40, 40}  // RAINBOW-RALPHING CAT (40-40)
+    };
     
     // Public getter cho photonView
     public PhotonView PhotonView => photonView;
@@ -40,58 +76,92 @@ public class CardManager : MonoBehaviour
         // Khởi tạo bộ bài ngay trong Awake để đảm bảo nó sẵn sàng trước khi phát
         if (PhotonNetwork.IsMasterClient)
         {
-            CreateDeck();
-            ShuffleDeck();
+            CreateDeck(PhotonNetwork.PlayerList.Length);
+            // Không xáo bài ngay lập tức - sẽ xáo sau khi phát bài ban đầu
         }
     }
 
     private void Start()
     {
-        // Đồng bộ số lượng thẻ bài
+        // Đồng bộ số lượng thẻ bài và cập nhật deck visual
         if (PhotonNetwork.IsMasterClient && Deck.Count > 0)
         {
             photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
         }
+        
+        // Khởi tạo deck visual cho tất cả client
+        CheckDeckVisual(Deck.Count);
     }
 
-    private void CreateDeck()
+    private void CreateDeck(int playerCount)
     {
-        int count = 0;
-        int index = 0;
-        AddCards("Exploding", ref count, cardQuantities[index++]);
-        AddCards("Defuse", ref count, cardQuantities[index++]);
-        AddCards("Attack", ref count, cardQuantities[index++]);
-        AddCards("Favor", ref count, cardQuantities[index++]);
-        AddCards("Nope", ref count, cardQuantities[index++]);
-        AddCards("Shuffle", ref count, cardQuantities[index++]);
-        AddCards("Skip", ref count, cardQuantities[index++]);
-        AddCards("SeeTheFuture", ref count, cardQuantities[index++]);
-
-        for (int i = 0; i < cardQuantities[index]; i++)
+        // Convert player count to index (2 players = index 0, 3 players = index 1, etc.)
+        int playerIndex = Mathf.Clamp(playerCount - 2, 0, 3);
+        
+        Debug.Log($"Creating deck for {playerCount} players (index: {playerIndex})");
+        
+        // Card names corresponding to each row in the table
+        string[] cardNames = {
+            "Exploding", "Defuse", "Attack", "Favor", "Nope", 
+            "Shuffle", "Skip", "SeeTheFuture", "HairyPotatoCat", 
+            "BeardCat", "Cattermelon", "Tacocat", "RainbowRalphingCat"
+        };
+        
+        // Create cards based on the quantities table
+        for (int cardType = 0; cardType < cardNames.Length; cardType++)
         {
-            for (int j = 0; j < 4; j++)
+            int quantity = cardQuantitiesByPlayers[cardType, playerIndex];
+            
+            // Skip cards with 0 quantity
+            if (quantity == 0) continue;
+            
+            // Get sprite range for this card type
+            int startSpriteIndex = cardSpriteRanges[cardType, 0];
+            int endSpriteIndex = cardSpriteRanges[cardType, 1];
+            int availableSprites = endSpriteIndex - startSpriteIndex + 1;
+            
+            for (int i = 0; i < quantity; i++)
             {
-                AddCard($"Normal{i+1}", count + i, j + 1);
+                int spriteIndex;
+                
+                // For normal cards (last 5 types), they can repeat sprites
+                if (cardType >= 8) // HairyPotatoCat and beyond
+                {
+                    // Use sprites from the available range, can repeat
+                    spriteIndex = startSpriteIndex + (i % availableSprites);
+                }
+                else
+                {
+                    // For special cards, use different sprites when possible
+                    if (i < availableSprites)
+                    {
+                        spriteIndex = startSpriteIndex + i;
+                    }
+                    else
+                    {
+                        // If we need more cards than available sprites, cycle through
+                        spriteIndex = startSpriteIndex + (i % availableSprites);
+                    }
+                }
+                
+                AddCard(cardNames[cardType], spriteIndex, i + 1);
             }
         }
-    }
-
-    private void AddCards(string name, ref int count, int quantity)
-    {
-        for (int i = 0; i < quantity; i++)
-        {
-            AddCard(name, i + count, i + 1);
-        }
-        count += quantity;
+        
+        Debug.Log($"Deck created with {Deck.Count} cards");
+        LogSpriteMapping();
+        LogDeckComposition();
+        CheckDeckVisualSetup();
     }
 
     private void AddCard(string name, int spriteIndex, int index)
     {
         if (spriteIndex >= allCardSprites.Length)
         {
-            Debug.LogWarning("Sprite index out of range for card: " + name);
+            Debug.LogWarning($"Sprite index {spriteIndex} out of range for card: {name}");
             return;
         }
+        
         CardData data = new CardData
         {
             cardName = $"{name}_{index}",
@@ -125,6 +195,9 @@ public class CardManager : MonoBehaviour
         {
             deckCardCount.text = count.ToString();
         }
+        
+        // Cập nhật deck visual khi có thay đổi số lượng
+        CheckDeckVisual(count);
     }
     
     // Rút thẻ bài khi nhấn nút Draw
@@ -150,7 +223,7 @@ public class CardManager : MonoBehaviour
         {
             if (Deck.Count == 0)
             {
-                Debug.LogWarning("Bộ bài đã hết!");
+                Debug.LogWarning("Deck is empty!");
                 return;
             }
             
@@ -189,7 +262,31 @@ public class CardManager : MonoBehaviour
                 effect = effect
             };
             
-            cardHolder.DrawCard(cardPrefab, cardData);
+            // Kiểm tra nếu là exploding card
+            if (effect == "Exploding")
+            {
+                Debug.Log("Rút được exploding card! Kích hoạt hiệu ứng...");
+                
+                // Kích hoạt hiệu ứng exploding ngay lập tức
+                if (CardEffectManager.Instance != null)
+                {
+                    Debug.Log("CardEffectManager found, activating exploding effect");
+                    CardEffectManager.Instance.ActivateCardEffect("Exploding", playerActorNumber);
+                }
+                else
+                {
+                    Debug.LogError("CardEffectManager.Instance is null! Cannot activate exploding effect!");
+                }
+                
+                // KHÔNG thêm exploding card vào tay người chơi
+                // Vì nó sẽ được xử lý bởi exploding effect
+            }
+            else
+            {
+                // Thêm card vào tay người chơi bình thường
+                Debug.Log($"Adding normal card {cardName} to hand");
+                cardHolder.DrawCard(cardPrefab, cardData);
+            }
             
             // Thông báo GameManager để cập nhật số lượng thẻ
             if (GameManager.Instance != null)
@@ -203,7 +300,7 @@ public class CardManager : MonoBehaviour
     }
     
     // Lấy index của sprite trong mảng allCardSprites
-    private int GetSpriteIndex(Sprite sprite)
+    public int GetSpriteIndex(Sprite sprite)
     {
         for (int i = 0; i < allCardSprites.Length; i++)
         {
@@ -217,11 +314,21 @@ public class CardManager : MonoBehaviour
     
     public void CheckDeckVisual(int count)
     {
+        if (cardDeckVisual == null)
+        {
+            Debug.LogWarning("cardDeckVisual is null!");
+            return;
+        }
+        
         if (count == 0)
         {
-            Debug.Log("Deck is empty");
+            Debug.Log("Deck is empty - hiding deck visual");
             cardDeckVisual.gameObject.SetActive(false);
-            return;
+        }
+        else
+        {
+            Debug.Log($"Deck has {count} cards - showing deck visual");
+            cardDeckVisual.gameObject.SetActive(true);
         }
     }
     
@@ -229,24 +336,34 @@ public class CardManager : MonoBehaviour
     // Lưu ý: Đánh bài không tự động chuyển lượt - chỉ có rút bài mới chuyển lượt
     public void PlayCard(Card card, int playerActorNumber)
     {
-        Debug.Log($"Đang thử chơi bài {card.data.cardName} bởi người chơi {playerActorNumber}");
+        Debug.Log($"Trying to play card {card.data.cardName} by player {playerActorNumber}");
+        
+        // Kiểm tra card đã được played chưa - CRITICAL SAFETY CHECK
+        if (card.isPlayed)
+        {
+            Debug.LogWarning($"Card {card.data.cardName} already played, aborting");
+            return;
+        }
         
         // Kiểm tra null
         if (GameManager.Instance == null)
         {
-            Debug.LogError("GameManager.Instance là null khi thử chơi bài!");
+            Debug.LogError("GameManager.Instance is null when trying to play card!");
             return;
         }
         
         // Ghi log lượt chơi hiện tại để debug
         int currentTurnIndex = GameManager.Instance.GetCurrentTurnIndex();
         int localPlayerIndex = PhotonNetwork.LocalPlayer.ActorNumber;
-        Debug.Log($"Lượt hiện tại: {currentTurnIndex}, Người chơi local: {localPlayerIndex}, IsLocalPlayerTurn: {GameManager.Instance.IsLocalPlayerTurn()}");
+        Debug.Log($"Current turn: {currentTurnIndex}, Local player: {localPlayerIndex}, IsLocalPlayerTurn: {GameManager.Instance.IsLocalPlayerTurn()}");
         
         // Kiểm tra xem có phải lượt của người chơi không
         if (GameManager.Instance.IsLocalPlayerTurn())
         {
-            Debug.Log($"Người chơi {playerActorNumber} đang chơi thẻ {card.data.cardName}");
+            Debug.Log($"Player {playerActorNumber} is playing card {card.data.cardName}");
+            
+            // Mark card as played IMMEDIATELY để tránh duplicate processing
+            card.isPlayed = true;
             
             // Gửi RPC để tất cả người chơi đều thấy thẻ bài được chơi
             photonView.RPC("RPC_PlayCard", RpcTarget.All, 
@@ -262,17 +379,13 @@ public class CardManager : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("CardEffectManager.Instance là null khi thử kích hoạt hiệu ứng bài!");
+                Debug.LogWarning("CardEffectManager.Instance is null when trying to activate card effect!");
             }
             
-            // Xóa thẻ bài khỏi tay người chơi
-            if (cardHolder != null)
+            // Xóa thẻ bài khỏi tay người chơi (only if local player)
+            if (playerActorNumber == PhotonNetwork.LocalPlayer.ActorNumber && cardHolder != null)
             {
                 cardHolder.RemoveCard(card);
-            }
-            else
-            {
-                Debug.LogWarning("cardHolder là null khi thử xóa thẻ bài!");
             }
             
             // Cập nhật số lượng thẻ bài
@@ -283,14 +396,14 @@ public class CardManager : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning($"Không thể chơi bài - chưa đến lượt của bạn! Lượt hiện tại: {currentTurnIndex}, Người chơi local: {localPlayerIndex}");
+            Debug.LogWarning($"Cannot play card - not your turn! Current turn: {currentTurnIndex}, Local player: {localPlayerIndex}");
         }
     }
     
     [PunRPC]
     private void RPC_PlayCard(string cardName, int spriteIndex, string effect, int playerActorNumber)
     {
-        Debug.Log($"Người chơi {playerActorNumber} đã chơi thẻ {cardName}");
+        Debug.Log($"Player {playerActorNumber} played card {cardName}");
         
         // Hiển thị thẻ bài trong khu vực chơi
         if (playCardZone != null)
@@ -319,6 +432,20 @@ public class CardManager : MonoBehaviour
         return Deck.Count;
     }
     
+    // Phương thức chèn card vào deck tại vị trí chỉ định
+    public void InsertCardIntoDeck(CardData card, int position)
+    {
+        if (position < 0) position = 0;
+        if (position > Deck.Count) position = Deck.Count;
+        
+        Deck.Insert(position, card);
+        
+        // Cập nhật UI deck count
+        photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+        
+        Debug.Log($"Đã chèn {card.cardName} vào vị trí {position} trong deck");
+    }
+    
     // Phương thức phát bài ban đầu cho tất cả người chơi
     public void DealInitialCards(List<Photon.Realtime.Player> players, int cardsPerPlayer)
     {
@@ -340,7 +467,7 @@ public class CardManager : MonoBehaviour
                 // Kiểm tra lại số lượng bài trong bộ
                 if (Deck.Count == 0)
                 {
-                    Debug.LogWarning("Bộ bài đã hết trong quá trình phát!");
+                    Debug.LogWarning("Deck ran out during dealing!");
                     return;
                 }
                 
@@ -370,10 +497,14 @@ public class CardManager : MonoBehaviour
     [PunRPC]
     private void RPC_ReceiveInitialCard(string cardName, int spriteIndex, string effect, int playerActorNumber, int remainingDeckCount)
     {
-        // Cập nhật số lượng bài trong deck
-        if (deckCardCount != null)
+        // Chỉ cập nhật deck count nếu không phải là -1 (special dealing)
+        if (remainingDeckCount >= 0)
         {
-            deckCardCount.text = remainingDeckCount.ToString();
+            // Cập nhật số lượng bài trong deck
+            if (deckCardCount != null)
+            {
+                deckCardCount.text = remainingDeckCount.ToString();
+            }
         }
         
         // Chỉ người chơi nhận thẻ mới hiển thị thẻ của mình
@@ -405,7 +536,285 @@ public class CardManager : MonoBehaviour
             }
         }
         
-        // Kiểm tra xem deck có còn bài không
-        CheckDeckVisual(remainingDeckCount);
+        // Chỉ kiểm tra deck visual nếu không phải là special dealing
+        if (remainingDeckCount >= 0)
+        {
+            CheckDeckVisual(remainingDeckCount);
+        }
+    }
+    
+    // Kiểm tra player có defuse card trong tay không
+    public bool HasDefuseCardInHand()
+    {
+        if (cardHolder != null)
+        {
+            foreach (Card card in cardHolder.Cards)
+            {
+                if (card.data.effect == "Defuse")
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    // Lấy số lượng defuse card trong tay
+    public int GetDefuseCardCount()
+    {
+        int count = 0;
+        if (cardHolder != null)
+        {
+            foreach (Card card in cardHolder.Cards)
+            {
+                if (card.data.effect == "Defuse")
+                {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+    
+    // Public method to recreate deck for a specific number of players
+    public void RecreateDeckForPlayers(int playerCount)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+        {
+            Debug.LogWarning("Only master client can recreate deck");
+            return;
+        }
+        
+        // Clear existing deck
+        Deck.Clear();
+        
+        // Create new deck
+        CreateDeck(playerCount);
+        ShuffleDeck();
+        
+        // Update deck count UI and visual for all clients
+        photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+        
+        Debug.Log($"Deck recreated for {playerCount} players with {Deck.Count} cards");
+        LogSpriteMapping();
+        LogDeckComposition();
+    }
+
+    // Debug method to show deck composition
+    public void LogDeckComposition()
+    {
+        if (!PhotonNetwork.IsMasterClient)
+        {
+            Debug.LogWarning("Only master client can access deck composition");
+            return;
+        }
+        
+        Dictionary<string, int> cardCounts = new Dictionary<string, int>();
+        Dictionary<string, List<int>> cardSpritesByType = new Dictionary<string, List<int>>();
+        
+        foreach (CardData card in Deck)
+        {
+            if (cardCounts.ContainsKey(card.effect))
+            {
+                cardCounts[card.effect]++;
+            }
+            else
+            {
+                cardCounts[card.effect] = 1;
+                cardSpritesByType[card.effect] = new List<int>();
+            }
+            
+            // Track sprite indices for each card type
+            int spriteIndex = GetSpriteIndex(card.sprite);
+            if (!cardSpritesByType[card.effect].Contains(spriteIndex))
+            {
+                cardSpritesByType[card.effect].Add(spriteIndex);
+            }
+        }
+        
+        Debug.Log("=== DECK COMPOSITION ===");
+        Debug.Log($"Total cards in deck: {Deck.Count}");
+        foreach (var kvp in cardCounts)
+        {
+            var spriteIndices = cardSpritesByType[kvp.Key];
+            spriteIndices.Sort();
+            string spriteInfo = string.Join(", ", spriteIndices);
+            Debug.Log($"{kvp.Key}: {kvp.Value} cards (sprites: {spriteInfo})");
+        }
+        Debug.Log("========================");
+    }
+    
+    // Debug method to show sprite mapping configuration
+    public void LogSpriteMapping()
+    {
+        string[] cardNames = {
+            "Exploding", "Defuse", "Attack", "Favor", "Nope", 
+            "Shuffle", "Skip", "SeeTheFuture", "HairyPotatoCat", 
+            "BeardCat", "Cattermelon", "Tacocat", "RainbowRalphingCat"
+        };
+        
+        Debug.Log("=== SPRITE MAPPING ===");
+        for (int i = 0; i < cardNames.Length; i++)
+        {
+            int startSprite = cardSpriteRanges[i, 0];
+            int endSprite = cardSpriteRanges[i, 1];
+            int availableSprites = endSprite - startSprite + 1;
+            
+            Debug.Log($"{cardNames[i]}: sprites {startSprite}-{endSprite} ({availableSprites} available)");
+        }
+        Debug.Log("======================");
+    }
+    
+    // Phương thức phát bài ban đầu đặc biệt: mỗi người 1 Defuse + 4 lá khác (không có Exploding)
+    public void DealInitialCardsSpecial(List<Photon.Realtime.Player> players)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+            
+        Debug.Log($"Đang phát bài đặc biệt cho {players.Count} người chơi (1 Defuse + 4 lá khác)");
+        
+        // Tạo danh sách các lá bài không phải Exploding và Defuse để phát
+        List<CardData> nonExplodingNonDefuseCards = new List<CardData>();
+        List<CardData> defuseCards = new List<CardData>();
+        List<CardData> explodingCards = new List<CardData>();
+        
+        // Phân loại các lá bài
+        foreach (CardData card in Deck)
+        {
+            if (card.effect == "Exploding")
+            {
+                explodingCards.Add(card);
+            }
+            else if (card.effect == "Defuse")
+            {
+                defuseCards.Add(card);
+            }
+            else
+            {
+                nonExplodingNonDefuseCards.Add(card);
+            }
+        }
+        
+        // Xáo trộn các lá bài không phải Exploding và Defuse
+        nonExplodingNonDefuseCards = nonExplodingNonDefuseCards.OrderBy(a => Random.value).ToList();
+        
+        // Kiểm tra xem có đủ bài để phát không
+        if (defuseCards.Count < players.Count)
+        {
+            Debug.LogError($"Không đủ lá Defuse! Cần {players.Count} lá nhưng chỉ có {defuseCards.Count} lá");
+            return;
+        }
+        
+        if (nonExplodingNonDefuseCards.Count < players.Count * 4)
+        {
+            Debug.LogError($"Không đủ lá bài khác! Cần {players.Count * 4} lá nhưng chỉ có {nonExplodingNonDefuseCards.Count} lá");
+            return;
+        }
+        
+        // Phát bài cho từng người chơi
+        int nonExplodingIndex = 0;
+        
+        foreach (Photon.Realtime.Player player in players)
+        {
+            // Phát 1 lá Defuse
+            if (defuseCards.Count > 0)
+            {
+                CardData defuseCard = defuseCards[0];
+                defuseCards.RemoveAt(0);
+                
+                photonView.RPC("RPC_ReceiveInitialCard", RpcTarget.All, 
+                    defuseCard.cardName, 
+                    GetSpriteIndex(defuseCard.sprite), 
+                    defuseCard.effect, 
+                    player.ActorNumber,
+                    -1); // -1 để không cập nhật deck count trong quá trình phát bài
+                
+                System.Threading.Thread.Sleep(50);
+            }
+            
+            // Phát 4 lá bài khác
+            for (int i = 0; i < 4; i++)
+            {
+                if (nonExplodingIndex < nonExplodingNonDefuseCards.Count)
+                {
+                    CardData card = nonExplodingNonDefuseCards[nonExplodingIndex];
+                    nonExplodingIndex++;
+                    
+                    photonView.RPC("RPC_ReceiveInitialCard", RpcTarget.All, 
+                        card.cardName, 
+                        GetSpriteIndex(card.sprite), 
+                        card.effect, 
+                        player.ActorNumber,
+                        -1); // -1 để không cập nhật deck count trong quá trình phát bài
+                    
+                    System.Threading.Thread.Sleep(50);
+                }
+            }
+        }
+        
+        // Tạo lại deck với các lá bài còn lại
+        Deck.Clear();
+        
+        // Thêm lại các lá Defuse còn lại
+        foreach (CardData card in defuseCards)
+        {
+            Deck.Add(card);
+        }
+        
+        // Thêm tất cả các lá Exploding
+        foreach (CardData card in explodingCards)
+        {
+            Deck.Add(card);
+        }
+        
+        // Thêm các lá bài khác còn lại
+        for (int i = nonExplodingIndex; i < nonExplodingNonDefuseCards.Count; i++)
+        {
+            Deck.Add(nonExplodingNonDefuseCards[i]);
+        }
+        
+        // Xáo trộn lại deck
+        Deck = Deck.OrderBy(a => Random.value).ToList();
+        
+        // Cập nhật số lượng bộ bài
+        photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+        
+        Debug.Log($"Đã phát xong bài đặc biệt. Deck còn lại: {Deck.Count} lá");
+        LogDeckComposition();
+    }
+    
+    // Debug method to check deck visual setup
+    public void CheckDeckVisualSetup()
+    {
+        Debug.Log("=== DECK VISUAL SETUP ===");
+        Debug.Log($"cardDeckVisual assigned: {cardDeckVisual != null}");
+        Debug.Log($"deckCardCount assigned: {deckCardCount != null}");
+        
+        if (cardDeckVisual != null)
+        {
+            Debug.Log($"cardDeckVisual active: {cardDeckVisual.gameObject.activeSelf}");
+            Debug.Log($"cardDeckVisual name: {cardDeckVisual.name}");
+        }
+        
+        if (deckCardCount != null)
+        {
+            Debug.Log($"deckCardCount text: {deckCardCount.text}");
+        }
+        
+        Debug.Log($"Current deck count: {Deck.Count}");
+        Debug.Log("=========================");
+    }
+    
+    // Public method to manually update deck visual (useful for testing)
+    public void UpdateDeckVisual()
+    {
+        Debug.Log("Manually updating deck visual...");
+        CheckDeckVisualSetup();
+        CheckDeckVisual(Deck.Count);
+        
+        if (deckCardCount != null)
+        {
+            deckCardCount.text = Deck.Count.ToString();
+        }
     }
 }

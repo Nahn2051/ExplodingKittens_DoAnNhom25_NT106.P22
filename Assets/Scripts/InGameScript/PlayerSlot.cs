@@ -70,4 +70,24 @@ public class PlayerSlot : MonoBehaviour
             avatarBackground.color = color;
         }
     }
-} 
+    
+    public void SetEliminatedState(bool isEliminated)
+    {
+        if (avatarBackground != null)
+        {
+            // Đổi màu thành đỏ hoặc xám để báo hiệu player bị loại
+            avatarBackground.color = isEliminated ? Color.red : Color.white;
+        }
+        
+        // Có thể thêm hiệu ứng khác như làm mờ
+        if (playerAvatarImage != null)
+        {
+            playerAvatarImage.color = isEliminated ? new Color(1f, 1f, 1f, 0.5f) : Color.white;
+        }
+        
+        if (playerNameText != null)
+        {
+            playerNameText.color = isEliminated ? Color.gray : Color.white;
+        }
+    }
+}

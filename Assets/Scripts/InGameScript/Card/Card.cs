@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Photon.Pun;
 
 public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHandler,
     IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
@@ -84,6 +85,24 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (isPlayed) return;
+        
+        // Kiểm tra nếu exploding đang diễn ra
+        if (CardEffectManager.IsExplodingInProgress)
+        {
+            // Chỉ cho phép người chơi bị dính exploding kéo thẻ Defuse
+            if (CardEffectManager.ExplodingPlayerId != PhotonNetwork.LocalPlayer.ActorNumber)
+            {
+                // Không phải người chơi bị dính exploding -> không cho kéo thẻ
+                Debug.Log("Không thể kéo thẻ khi có người chơi đang xử lý Exploding!");
+                return;
+            }
+            else if (data.effect != "Defuse")
+            {
+                // Người chơi bị dính exploding nhưng không phải thẻ Defuse -> không cho kéo
+                Debug.Log("Chỉ có thể kéo thẻ Defuse khi bạn bị dính Exploding!");
+                return;
+            }
+        }
 
         BeginDragEvent?.Invoke(this);
         Vector2 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
@@ -118,12 +137,40 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
 
         foreach (var result in results)
         {
+            // Kiểm tra PlayZone - CHỈ handle nếu không có IDropHandler
             if (result.gameObject.CompareTag("PlayZone"))
             {
-                PlayCardZone playZone = result.gameObject.GetComponent<PlayCardZone>();
-                if (playZone != null)
+                // Kiểm tra xem object có IDropHandler không
+                var dropHandler = result.gameObject.GetComponent<IDropHandler>();
+                if (dropHandler == null)
                 {
-                    playZone.PlayCard(this);
+                    // Chỉ gọi PlayCard nếu KHÔNG có IDropHandler (fallback)
+                    PlayCardZone playZone = result.gameObject.GetComponent<PlayCardZone>();
+                    if (playZone != null)
+                    {
+                        playZone.PlayCard(this);
+                        break;
+                    }
+                }
+                else
+                {
+                    // Có IDropHandler - OnDrop sẽ handle, không cần gọi PlayCard
+                    break;
+                }
+            }
+            // Kiểm tra DefuseZone
+            else if (result.gameObject.CompareTag("DefuseZone"))
+            {
+                // Trong trường hợp exploding, chỉ cho phép thẻ Defuse được thả vào DefuseZone
+                if (CardEffectManager.IsExplodingInProgress && 
+                    CardEffectManager.ExplodingPlayerId == PhotonNetwork.LocalPlayer.ActorNumber && 
+                    data.effect == "Defuse")
+                {
+                    // Gọi trực tiếp method từ CardEffectManager
+                    if (CardEffectManager.Instance != null)
+                    {
+                        CardEffectManager.Instance.OnDefuseCardDropped(this);
+                    }
                     break;
                 }
             }
@@ -207,5 +254,30 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
         int index = ParentIndex();
         int total = transform.parent.parent.childCount - 1;
         return Mathf.InverseLerp(0, total, index);
+    }
+
+    // Method để cập nhật visual state khi thẻ được chọn cho combo
+    public void UpdateComboSelectionVisual()
+    {
+        if (this == null || transform == null) return;
+        
+        if (selected)
+        {
+            // Thẻ được chọn - thay đổi màu hoặc scale
+            if (imageComponent != null)
+            {
+                imageComponent.color = Color.yellow; // Highlight màu vàng
+            }
+            transform.localScale = Vector3.one * 1.1f; // Scale lên 10%
+        }
+        else
+        {
+            // Thẻ không được chọn - reset về trạng thái bình thường
+            if (imageComponent != null)
+            {
+                imageComponent.color = Color.white;
+            }
+            transform.localScale = Vector3.one;
+        }
     }
 }
