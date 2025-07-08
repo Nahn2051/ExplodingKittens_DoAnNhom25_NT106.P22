@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Firebase.Database;
 
 public class FirebaseLoginManager : MonoBehaviour
 {
@@ -23,6 +24,7 @@ public class FirebaseLoginManager : MonoBehaviour
     public Button buttonLogin;
 
     private FirebaseAuth auth;
+    private DatabaseReference dbReference;
 
     // Chuyển đổi qua lại giữa đăng nhập và đăng ký
     [Header(header: "Switch")]
@@ -42,6 +44,32 @@ public class FirebaseLoginManager : MonoBehaviour
         buttonMovetoRegister.onClick.AddListener(MoveToRegister);
         buttonMovetoLogin.onClick.AddListener(MoveToLogin);
         buttonForgotPassword.onClick.AddListener(MoveToForgotPassword);
+        dbReference = FirebaseDatabase.DefaultInstance.RootReference;
+
+        // Set default UI panel
+        loginPanel.SetActive(true);
+        registerPanel.SetActive(false);
+        forgotPasswordPanel.SetActive(false);
+        // Bind button listeners
+        registerButton.onClick.AddListener(RegisterAccount);
+        loginButton.onClick.AddListener(LoginAccount);
+        sendResetPasswordButton.onClick.AddListener(SendPasswordResetEmail);
+    }
+
+    public void ShowPopup(string message)
+    {
+        popupText.text = message;
+        popupPanel.SetActive(true);
+    }
+
+    public void HidePopup()
+    {
+        popupPanel.SetActive(false);
+    }
+
+    private bool IsValidEmail(string email)
+    {
+        return email.Contains("@") && email.Contains(".");
     }
 
     public void RegisterAccount()
@@ -91,6 +119,38 @@ public class FirebaseLoginManager : MonoBehaviour
             // Chuyển cảnh vào game
             SceneManager.LoadScene(sceneName: "Main Menu");
 
+            // 1. Tạo một đường dẫn trong database để lưu trạng thái online của user
+            DatabaseReference sessionRef = dbReference.Child("sessions").Child(user.UserId).Child("isOnline");
+
+            // 2. Kiểm tra xem user này đã online ở nơi khác chưa
+            sessionRef.GetValueAsync().ContinueWithOnMainThread(checkTask =>
+            {
+                if (checkTask.IsFaulted || checkTask.IsCanceled)
+                {
+                    ShowPopup("Failed to check session status.");
+                    auth.SignOut();
+                    return;
+                }
+
+                DataSnapshot snapshot = checkTask.Result;
+                if (snapshot.Exists && (bool)snapshot.Value == true)
+                {
+                    // Nếu đã online -> hiển thị lỗi và đăng xuất
+                    ShowPopup("Account is already logged in elsewhere.");
+                    auth.SignOut();
+                }
+                else
+                {
+                    // Nếu chưa online -> cho phép đăng nhập và cập nhật trạng thái
+                    // Dùng OnDisconnect để tự động set false khi người dùng mất kết nối
+                    sessionRef.OnDisconnect().SetValue(false);
+                    // Đặt trạng thái là true
+                    sessionRef.SetValueAsync(true);
+
+                    // Chuyển đến màn hình Main Menu
+                    SceneManager.LoadScene("Main Menu");
+                }
+            });
         });
     }
     public void MoveToRegister()

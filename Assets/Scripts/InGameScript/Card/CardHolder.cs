@@ -16,6 +16,13 @@ public class CardHolder : MonoBehaviour
     private bool isCrossing = false;
     [SerializeField] private bool tweenCardReturn = true;
 
+    public static CardHolder Instance { get; private set; }
+
+    private void Awake()
+    {
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
+    }
     private void Start()
     {
         Rect = GetComponent<RectTransform>();
@@ -62,7 +69,7 @@ public class CardHolder : MonoBehaviour
         ArrangeCards();
     }
     
-    private void ArrangeCards()
+    public void ArrangeCards()
     {
         // Clean up null references first
         Cards.RemoveAll(card => card == null);
@@ -246,5 +253,47 @@ public class CardHolder : MonoBehaviour
         if (card == null) return false;
         CleanupNullReferences();
         return Cards.Contains(card);
+    public void RemoveCardByName(string cardName)
+    {
+        Card cardToRemove = Cards.FirstOrDefault(c => c.data.cardName == cardName);
+        if (cardToRemove != null)
+        {
+            Cards.Remove(cardToRemove);
+            Destroy(cardToRemove.transform.parent.gameObject); // ⚠️ dùng parent mới đúng
+            Debug.Log("🗑️ Đã xoá lá bài: " + cardName);
+
+            ArrangeCards();
+            GameManager.Instance?.UpdatePlayerCardCount(); // ✅ cập nhật số bài
+        }
+        else
+        {
+            Debug.LogWarning("⚠️ Không tìm thấy lá bài để xoá: " + cardName);
+        }
+    }
+    public void AddCard(GameObject cardPrefab, CardData data)
+    {
+        GameObject cardObj = Instantiate(cardPrefab);
+        cardObj.transform.SetParent(transform, false);
+
+        Card cardComp = cardObj.GetComponentInChildren<Card>(); // 👈 giống như trong DrawCard
+
+        if (cardComp != null)
+        {
+            cardComp.Setup(data);
+            Cards.Add(cardComp);
+
+            cardObj.transform.localPosition = Vector3.zero;
+            cardObj.transform.localScale = Vector3.one;
+
+            RegisterCardEvents(cardComp);
+            ArrangeCards();
+            GameManager.Instance?.UpdatePlayerCardCount(); // ✅ cập nhật số bài
+
+            Debug.Log("📥 Đã thêm lá bài: " + data.cardName);
+        }
+        else
+        {
+            Debug.LogError("❌ Không tìm thấy component Card trong prefab!");
+        }
     }
 }

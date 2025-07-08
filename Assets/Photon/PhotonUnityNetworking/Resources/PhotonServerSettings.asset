@@ -64,6 +64,13 @@ MonoBehaviour:
   - RPC_ExecuteThreeCardCombo
   - RPC_ExecuteTwoCardCombo
   - RPC_ReceiveCardFromCombo
+  - RPC_ContinueAttackedTurn
+  - RPC_ReceiveFutureCards
+  - RPC_RequestSeeTheFuture
+  - RPC_RequestShuffle
+  - RPC_RequestFavorCard
+  - RPC_ReceiveFavorCardByName
+  - RPC_ReceiveFavorCardByData
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1
