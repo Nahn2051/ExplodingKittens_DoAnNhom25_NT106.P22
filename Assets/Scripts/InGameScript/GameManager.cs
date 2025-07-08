@@ -613,11 +613,13 @@ public class GameManager : MonoBehaviourPunCallbacks
             CardEffectManager.Instance.photonView.RPC("RPC_ShowWinner", RpcTarget.All, winnerName);
         }
     }
-    
+
     // Phương thức để set trạng thái exploding
     public void SetExplodingInProgress(bool inProgress)
     {
         isExplodingInProgress = inProgress;
+        // Đồng bộ với CardEffectManager để tránh desync
+        CardEffectManager.IsExplodingInProgress = inProgress;
     }
 
     // Public method để test việc phát bài đặc biệt
