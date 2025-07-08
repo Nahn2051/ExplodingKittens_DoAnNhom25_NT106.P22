@@ -378,29 +378,33 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     private void HandleAttackEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Attack từ người chơi {playerId}");
+        // Cho phép Nope
+        NopeManager.Instance?.StartNopeWindow("Attack", playerId);
         // TODO: Implement khi game phát triển thêm
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
             GameManager.Instance.ProcessAttackPlayed();
         }
+        // Khi effect kết thúc, tắt Nope
+        NopeManager.Instance?.EndNopeWindow();
     }
 
     private void HandleFavorEffect(int playerId)
     {
         Debug.Log($"[Favor] Xử lý hiệu ứng Favor từ player {playerId}");
-
+        NopeManager.Instance?.StartNopeWindow("Favor", playerId);
         if (PhotonNetwork.LocalPlayer.ActorNumber != playerId)
         {
             Debug.Log("[Favor] Đây không phải lượt của mình.");
+            NopeManager.Instance?.EndNopeWindow();
             return;
         }
-
         if (FavorTargetSelectUI.Instance == null)
         {
             Debug.LogError("FavorTargetSelectUI.Instance vẫn null!");
+            NopeManager.Instance?.EndNopeWindow();
             return;
         }
-
         FavorTargetSelectUI.Instance.Show(
             GameManager.Instance.playerList,
             PhotonNetwork.LocalPlayer.ActorNumber,
@@ -409,15 +413,16 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
                 Debug.Log("[Favor] Đã chọn người chơi có ID: " + targetPlayerId);
                 // Gửi RPC tiếp theo ở đây
                 photonView.RPC("RPC_RequestFavorCard", RpcTarget.All, playerId, targetPlayerId);
+                NopeManager.Instance?.EndNopeWindow();
             }
         );
     }
 
-
     private void HandleNopeEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Nope từ người chơi {playerId}");
-        // TODO: Implement khi game phát triển thêm
+        // Gọi NopeManager xử lý logic Nope
+        NopeManager.Instance?.PlayNope(playerId);
     }
     
     private void HandleShuffleEffect(int playerId)
@@ -431,21 +436,20 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     private void HandleSkipEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Skip từ người chơi {playerId}");
+        NopeManager.Instance?.StartNopeWindow("Skip", playerId);
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
             GameManager.Instance.ProcessSkipPlayed();
         }
-        
+        NopeManager.Instance?.EndNopeWindow();
         // Reset trạng thái exploding
         IsExplodingInProgress = false;
         ExplodingPlayerId = -1;
-        
         // Resume turn switching - player đã bị loại
         if (GameManager.Instance != null)
         {
             GameManager.Instance.SetExplodingInProgress(false);
         }
-        
         // Gửi RPC thông báo player bị loại
         photonView.RPC("RPC_PlayerEliminated", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
     }
@@ -649,5 +653,90 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         
         // Make sure UI remains interactive after effect
         Debug.Log("SeeTheFuture effect completed, UI should remain interactive");
+    }
+
+    // Khi có người rút bài, reset trạng thái Nope
+    public void OnPlayerDrawCard()
+    {
+        NopeManager.Instance?.OnPlayerDrawCard();
+    }
+
+    // ==== CÁC HÀM BỔ SUNG ĐỂ NOPEMANAGER GỌI ====
+    public void CancelSkipEffect(int playerId)
+    {
+        Debug.Log($"Skip của player {playerId} bị Nope!");
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ReturnTurnToPlayer(playerId);
+        }
+    }
+    public void ResumeSkipEffect(int playerId)
+    {
+        Debug.Log($"Skip của player {playerId} được phục hồi!");
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ProcessSkipPlayed();
+        }
+    }
+    public void CancelAttackEffect(int playerId)
+    {
+        Debug.Log($"Attack của player {playerId} bị Nope!");
+        // TODO: Implement logic to reset attackTurns or skip attack effect
+        // GameManager.Instance.attackTurns = 1; // If attackTurns is public, or add a method to reset
+    }
+    public void ResumeAttackEffect(int playerId)
+    {
+        Debug.Log($"Attack của player {playerId} được phục hồi!");
+        // TODO: Implement logic to resume attack effect
+    }
+    public void CancelFavorEffect(int playerId)
+    {
+        Debug.Log($"Favor của player {playerId} bị Nope!");
+        if (FavorTargetSelectUI.Instance != null)
+        {
+            FavorTargetSelectUI.Instance.gameObject.SetActive(false);
+        }
+    }
+    public void ResumeFavorEffect(int playerId)
+    {
+        Debug.Log($"Favor của player {playerId} được phục hồi!");
+        // Có thể show lại UI chọn Favor nếu cần
+    }
+    public void CancelComboEffect(object comboData)
+    {
+        Debug.Log($"Combo bị Nope!");
+        if (normalCardComboUI != null)
+        {
+            normalCardComboUI.HideAllPanels();
+        }
+    }
+    public void ResumeComboEffect(object comboData)
+    {
+        Debug.Log($"Combo được phục hồi!");
+        // Có thể phục hồi lại combo nếu cần
+    }
+    public void CancelShuffleEffect(int playerId)
+    {
+        Debug.Log($"Shuffle của player {playerId} bị Nope!");
+        // Dừng shuffle nếu đang thực hiện
+    }
+    public void ResumeShuffleEffect(int playerId)
+    {
+        Debug.Log($"Shuffle của player {playerId} được phục hồi!");
+        // Có thể thực hiện lại shuffle nếu cần
+    }
+    public void CancelSeeTheFutureEffect(int playerId)
+    {
+        Debug.Log($"SeeTheFuture của player {playerId} bị Nope!");
+        if (SeeTheFutureUI.Instance != null)
+        {
+            // Panel auto-hides, but if needed:
+            // SeeTheFutureUI.Instance.seeTheFuturePanel.SetActive(false); // if public
+        }
+    }
+    public void ResumeSeeTheFutureEffect(int playerId)
+    {
+        Debug.Log($"SeeTheFuture của player {playerId} được phục hồi!");
+        // Có thể show lại UI nếu cần
     }
 }

@@ -657,4 +657,20 @@ public class GameManager : MonoBehaviourPunCallbacks
         }
         return count;
     }
+
+    // Add this method for NopeManager/Skip effect
+    public void ReturnTurnToPlayer(int playerId)
+    {
+        // Find the index of the player in playerList by ActorNumber
+        int idx = playerList.FindIndex(p => p.ActorNumber == playerId);
+        if (idx >= 0)
+        {
+            currentTurnIndex = idx;
+            StartTurn(idx);
+        }
+        else
+        {
+            Debug.LogWarning($"ReturnTurnToPlayer: playerId {playerId} not found in playerList");
+        }
+    }
 }
