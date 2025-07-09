@@ -319,7 +319,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5cb1cac25ada1a8478b6e26adab148a3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MainAudioMixer: {fileID: 24100000, guid: 5b94e6d1394dcf445ae39f7d9be9b572, type: 2}
   StartButton: {fileID: 0}
 --- !u!1 &179626945
 GameObject:
@@ -1633,7 +1632,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5cb1cac25ada1a8478b6e26adab148a3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MainAudioMixer: {fileID: 24100000, guid: 5b94e6d1394dcf445ae39f7d9be9b572, type: 2}
   StartButton: {fileID: 0}
 --- !u!1 &1030396337
 GameObject:
