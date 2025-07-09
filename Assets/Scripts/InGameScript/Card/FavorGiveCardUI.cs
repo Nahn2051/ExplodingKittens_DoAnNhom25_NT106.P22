@@ -9,7 +9,7 @@ public class FavorGiveCardUI : MonoBehaviour
     public static FavorGiveCardUI Instance;
 
     [SerializeField] private Transform contentParent;
-    private GameObject buttonPrefab;
+    private GameObject cardButtonPrefab; // ✅ prefab button hình lá bài
     private Action<string> onCardSelected;
 
     private void Awake()
@@ -17,12 +17,11 @@ public class FavorGiveCardUI : MonoBehaviour
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
 
-        // Load prefab nút
-        buttonPrefab = Resources.Load<GameObject>("Prefabs/CardSelectionButton");
-        if (buttonPrefab == null)
-            Debug.LogError("❌ Không tìm thấy prefab CardSelectButton");
+        cardButtonPrefab = Resources.Load<GameObject>("Prefabs/CardButton");
+        if (cardButtonPrefab == null)
+            Debug.LogError("❌ Không tìm thấy prefab CardButton!");
 
-        gameObject.SetActive(false); // ẩn từ đầu
+        gameObject.SetActive(false);
     }
 
     public void Show(List<CardData> cards, Action<string> onSelected)
@@ -30,21 +29,23 @@ public class FavorGiveCardUI : MonoBehaviour
         onCardSelected = onSelected;
         gameObject.SetActive(true);
 
-        // Xoá nút cũ
         foreach (Transform child in contentParent)
             Destroy(child.gameObject);
 
         foreach (var card in cards)
         {
-            GameObject btn = Instantiate(buttonPrefab, contentParent);
-            TMP_Text txt = btn.GetComponentInChildren<TMP_Text>();
-            if (txt != null) txt.text = card.cardName;
+            GameObject btn = Instantiate(cardButtonPrefab, contentParent);
+            
+            // ✅ Set sprite cho Image
+            Image img = btn.GetComponentInChildren<Image>();
+            if (img != null) img.sprite = card.sprite;
 
+            // ✅ Gắn sự kiện
             btn.GetComponent<Button>().onClick.AddListener(() =>
             {
-                Debug.Log("🎴 Chọn lá: " + card.cardName);
+                Debug.Log("🎴 Chọn lá bài: " + card.cardName);
                 gameObject.SetActive(false);
-                onCardSelected?.Invoke(card.cardName);
+                onCardSelected?.Invoke(card.cardName); // Gửi về tên bài
             });
         }
     }
