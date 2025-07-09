@@ -50,14 +50,16 @@ public class GameManager : MonoBehaviourPunCallbacks
             drawCardButtonComponent = drawCardButton.GetComponent<Button>();
         }
     }
-    
+
     private void Start()
     {
         InitializeGame();
+        Vector3 spawnPos = new Vector3(UnityEngine.Random.Range(-2f, 2f), 0, UnityEngine.Random.Range(-2f, 2f));
+        PhotonNetwork.Instantiate("VoicePlayer", spawnPos, Quaternion.identity);
         float vol = PlayerPrefs.GetFloat("MusicVol", 0.75f); // Giá trị mặc định 0.75
         MainAudioMixer.SetFloat("MusicVol", vol);
     }
-    
+
     public int GetCurrentTurnIndex()
     {
         return currentTurnIndex;
