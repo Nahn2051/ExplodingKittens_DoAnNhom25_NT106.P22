@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: PhotonServerSettings
   m_EditorClassIdentifier: 
   AppSettings:
-    AppIdRealtime: 8929bc5b-7494-484c-a129-894be32324c1
+    AppIdRealtime: 
     AppIdFusion: 
     AppIdChat: 
     AppIdVoice: 
@@ -28,52 +28,12 @@ MonoBehaviour:
     AuthMode: 0
     EnableLobbyStatistics: 0
     NetworkLogging: 1
-  DevRegion: asia
+  DevRegion: 
   PunLogging: 0
   EnableSupportLogger: 0
   RunInBackground: 1
   StartInOfflineMode: 0
-  RpcList:
-  - ClickRpc
-  - DestroyRpc
-  - DestroySpaceship
-  - Fire
-  - RespawnSpaceship
-  - RPC_HostLeaving
-  - RPC_PlayerJoined
-  - RPC_StartGame
-  - RPC_ActivateCardEffect
-  - RPC_DealInitialCards
-  - RPC_DeckShuffled
-  - RPC_DrawCard
-  - RPC_PlayCard
-  - RPC_PlayerDrawCard
-  - RPC_ReceiveDrawnCard
-  - RPC_RequestDrawCard
-  - RPC_ShuffleDeck
-  - RPC_StartTurn
-  - RPC_UpdateDeckCount
-  - RPC_UpdatePlayerCardCount
-  - RPC_ReceiveInitialCard
-  - RPC_RequestStartTurn
-<<<<<<< HEAD
-  - RPC_AnnounceWinner
-  - RPC_PlayerEliminated
-  - RPC_ReinsertExplodingCard
-  - RPC_ShowWinner
-  - RPC_ComboCardNotFound
-  - RPC_ExecuteThreeCardCombo
-  - RPC_ExecuteTwoCardCombo
-  - RPC_ReceiveCardFromCombo
-=======
-  - RPC_ContinueAttackedTurn
-  - RPC_ReceiveFutureCards
-  - RPC_RequestSeeTheFuture
-  - RPC_RequestShuffle
-  - RPC_RequestFavorCard
-  - RPC_ReceiveFavorCardByName
-  - RPC_ReceiveFavorCardByData
->>>>>>> main
+  RpcList: []
   DisableAutoOpenWizard: 1
-  ShowSettings: 1
-  DevRegionSetOnce: 1
+  ShowSettings: 0
+  DevRegionSetOnce: 0
