@@ -151,6 +151,7 @@ public class ExplodingKittenUI : MonoBehaviour
         // Kiểm tra nếu card được thả vào defuse zone
         if (defuseCard.data.effect == "Defuse")
         {
+            Debug.Log($"[ExplodingKittenUI] Defuse card {defuseCard.data.cardName} dropped in zone");
             hasDefuseInZone = true;
             
             // Dừng countdown ngay lập tức
@@ -158,6 +159,28 @@ public class ExplodingKittenUI : MonoBehaviour
             {
                 StopCoroutine(countdownCoroutine);
                 countdownCoroutine = null;
+                Debug.Log("[ExplodingKittenUI] Countdown stopped");
+            }
+            
+            // Double-check để đảm bảo card được xóa khỏi CardHolder (fallback protection)
+            if (CardManager.Instance != null && CardManager.Instance.cardHolder != null)
+            {
+                // Kiểm tra xem card có còn trong CardHolder không
+                if (CardManager.Instance.cardHolder.Cards.Contains(defuseCard))
+                {
+                    Debug.Log("[ExplodingKittenUI] Fallback: Removing defuse card from CardHolder");
+                    CardManager.Instance.cardHolder.RemoveCard(defuseCard);
+                    
+                    // Cập nhật số lượng card
+                    if (GameManager.Instance != null)
+                    {
+                        GameManager.Instance.UpdatePlayerCardCount();
+                    }
+                }
+                else
+                {
+                    Debug.Log("[ExplodingKittenUI] Defuse card already removed from CardHolder");
+                }
             }
             
             // Ẩn exploding panel
@@ -166,7 +189,12 @@ public class ExplodingKittenUI : MonoBehaviour
                 
             // Hiển thị input để chọn vị trí đặt lại exploding card
             if (positionInputPanel != null)
+            {
                 positionInputPanel.SetActive(true);
+                
+                // Cập nhật placeholder text để hiển thị range hợp lệ
+                UpdatePlaceholderText();
+            }
                 
             OnDefuseCardDropped?.Invoke(defuseCard);
         }
@@ -176,8 +204,6 @@ public class ExplodingKittenUI : MonoBehaviour
     {
         if (positionInputField != null)
         {
-            positionInputField.placeholder.GetComponent<TMP_Text>().text = "1 - " + (CardManager.Instance.GetDeckCount() + 1);
-
             string input = positionInputField.text;
             if (int.TryParse(input, out int position))
             {
@@ -195,6 +221,10 @@ public class ExplodingKittenUI : MonoBehaviour
                 {
                     Debug.LogWarning($"Invalid position! Please enter from 1 to {deckCount + 1}");
                 }
+            }
+            else
+            {
+                Debug.LogWarning("Please enter a valid number!");
             }
         }
     }
@@ -229,5 +259,64 @@ public class ExplodingKittenUI : MonoBehaviour
     {
         Debug.Log("Test elimination triggered");
         OnPlayerEliminated?.Invoke();
+    }
+    
+    // Update placeholder text with current valid range
+    private void UpdatePlaceholderText()
+    {
+        if (positionInputField != null && positionInputField.placeholder != null && CardManager.Instance != null)
+        {
+            try
+            {
+                var placeholderText = positionInputField.placeholder.GetComponent<TMP_Text>();
+                if (placeholderText != null)
+                {
+                    int deckCount = CardManager.Instance.GetDeckCount();
+                    placeholderText.text = $"Enter position (1-{deckCount + 1})";
+                    Debug.Log($"Updated placeholder text: Enter position (1-{deckCount + 1})");
+                }
+                else
+                {
+                    Debug.LogWarning("Placeholder TMP_Text component not found!");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"Error updating placeholder text: {ex.Message}");
+            }
+        }
+        else
+        {
+            Debug.LogWarning("Cannot update placeholder - missing components!");
+        }
+    }
+    
+    // Debug method to check defuse card status
+    [ContextMenu("Debug Defuse Cards")]
+    public void DebugDefuseCards()
+    {
+        Debug.Log("=== DEFUSE CARD DEBUG ===");
+        
+        if (CardManager.Instance != null && CardManager.Instance.cardHolder != null)
+        {
+            int defuseCount = 0;
+            foreach (Card card in CardManager.Instance.cardHolder.Cards)
+            {
+                if (card.data.effect == "Defuse")
+                {
+                    defuseCount++;
+                    Debug.Log($"Defuse card found: {card.data.cardName}, IsPlayed: {card.isPlayed}");
+                }
+            }
+            
+            Debug.Log($"Total defuse cards in hand: {defuseCount}");
+            Debug.Log($"Total cards in hand: {CardManager.Instance.cardHolder.Cards.Count}");
+        }
+        else
+        {
+            Debug.LogError("CardManager or CardHolder is null!");
+        }
+        
+        Debug.Log("========================");
     }
 }

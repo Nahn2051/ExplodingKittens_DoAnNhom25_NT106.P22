@@ -65,17 +65,18 @@ public class FavorTargetSelectUI : MonoBehaviour
                 
                 button.onClick.AddListener(() =>
                 {
-                    Debug.Log($"FavorTargetSelectUI: Player {player.NickName} (ID: {player.ActorNumber}) selected");
+                    Debug.Log($"FavorTargetSelectUI: Player {player.NickName} (ID: {player.ActorNumber}) selected as target");
+                    Debug.Log($"FavorTargetSelectUI: About to invoke callback for target player {player.ActorNumber}");
+                    
                     onTargetSelected?.Invoke(player.ActorNumber);
                     gameObject.SetActive(false);
                     
-                    Debug.Log($"FavorTargetSelectUI: Target {player.ActorNumber} selected, panel deactivated");
+                    Debug.Log($"FavorTargetSelectUI: Callback invoked for player {player.ActorNumber}, panel hidden");
                     
                     // Ensure UI interactions are restored
                     if (GameManager.Instance != null)
                     {
                         GameManager.Instance.EnablePlayerInteractions();
-                        Debug.Log("FavorTargetSelectUI: UI interactions restored after target selection");
                     }
                 });
             }

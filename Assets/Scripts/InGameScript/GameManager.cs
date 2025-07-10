@@ -683,10 +683,21 @@ public class GameManager : MonoBehaviourPunCallbacks
         }
     }
     
+    // Flag to prevent multiple simultaneous UI restoration calls
+    private bool isRestoringUI = false;
+    
     // Method to explicitly re-enable player interactions
     // Can be called after UI effects that might block interaction
     public void EnablePlayerInteractions()
     {
+        // Prevent multiple simultaneous restoration calls
+        if (isRestoringUI)
+        {
+            Debug.Log("UI restoration already in progress, skipping duplicate call");
+            return;
+        }
+        
+        isRestoringUI = true;
         Debug.Log("Explicitly enabling player interactions");
         
         // Re-enable drawing cards if it's the player's turn
@@ -696,10 +707,12 @@ public class GameManager : MonoBehaviourPunCallbacks
             drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress;
         }
         
-        // If this is the local player's turn, make sure their cards are interactive
-        if (isLocalTurn && CardHolder.Instance != null)
+        // IMPORTANT: Always enable card interactions for the local player
+        // This allows them to continue playing cards even if it's not their draw turn
+        if (CardHolder.Instance != null)
         {
             CardHolder.Instance.EnableCardInteraction(true);
+            Debug.Log("Card interactions enabled for local player regardless of turn");
         }
         
         // Ensure all UI blocking elements are properly cleaned up
@@ -741,6 +754,9 @@ public class GameManager : MonoBehaviourPunCallbacks
         }
         
         Debug.Log("All UI interactions should now be restored");
+        
+        // Reset the restoration flag
+        isRestoringUI = false;
     }
 
     // Method to enable UI interactions without closing active dialogs
@@ -789,5 +805,38 @@ public class GameManager : MonoBehaviourPunCallbacks
         }
         
         Debug.Log($"Force enabled {allCanvases.Length} canvases and {allButtons.Length} buttons");
+    }
+
+    // Debug method to check current UI state
+    [ContextMenu("Debug UI State")]
+    public void DebugUIState()
+    {
+        Debug.Log("=== UI STATE DEBUG ===");
+        Debug.Log($"Is Local Player Turn: {IsLocalPlayerTurn()}");
+        Debug.Log($"Current Turn Index: {currentTurnIndex}");
+        Debug.Log($"Local Player Index: {localPlayerIndex}");
+        Debug.Log($"Is Exploding In Progress: {isExplodingInProgress}");
+        Debug.Log($"Is Restoring UI: {isRestoringUI}");
+        
+        if (drawCardButtonComponent != null)
+        {
+            Debug.Log($"Draw Card Button Interactable: {drawCardButtonComponent.interactable}");
+        }
+        else
+        {
+            Debug.Log("Draw Card Button Component: NULL");
+        }
+        
+        if (CardHolder.Instance != null)
+        {
+            Debug.Log($"CardHolder Instance Available: True");
+            Debug.Log($"Number of cards in hand: {CardHolder.Instance.Cards.Count}");
+        }
+        else
+        {
+            Debug.Log("CardHolder Instance: NULL");
+        }
+        
+        Debug.Log("======================");
     }
 }

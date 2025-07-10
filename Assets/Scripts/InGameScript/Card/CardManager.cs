@@ -18,6 +18,9 @@ public class CardManager : MonoBehaviour
     private List<CardData> Deck = new List<CardData>();
     private PhotonView photonView;
     
+    // Deck count synchronized across all clients
+    private int synchronizedDeckCount = 0;
+    
     // Card quantities based on player count [2,3,4,5 players]
     private int[,] cardQuantitiesByPlayers = {
         {1, 2, 3, 4},  // EXPLODING KITTEN
@@ -148,6 +151,10 @@ public class CardManager : MonoBehaviour
         }
         
         Debug.Log($"Deck created with {Deck.Count} cards");
+        
+        // Update synchronized deck count for all clients
+        synchronizedDeckCount = Deck.Count;
+        
         LogSpriteMapping();
         LogDeckComposition();
         CheckDeckVisualSetup();
@@ -191,6 +198,11 @@ public class CardManager : MonoBehaviour
     [PunRPC]
     public void RPC_UpdateDeckCount(int count)
     {
+        // Update synchronized deck count for all clients (including master client)
+        synchronizedDeckCount = count;
+        
+        Debug.Log($"[RPC_UpdateDeckCount] Synchronized deck count updated to {count}");
+        
         if (deckCardCount != null)
         {
             deckCardCount.text = count.ToString();
@@ -238,6 +250,9 @@ public class CardManager : MonoBehaviour
                 data.effect, 
                 playerActorNumber,
                 Deck.Count);
+            
+            // Đồng bộ deck count sau khi rút bài
+            SyncDeckCount();
         }
     }
     
@@ -443,21 +458,42 @@ public class CardManager : MonoBehaviour
     // Phương thức trả về số lượng bài còn lại trong bộ bài
     public int GetDeckCount()
     {
-        return Deck.Count;
+        // If we're the master client, return the actual deck count and sync if needed
+        if (PhotonNetwork.IsMasterClient)
+        {
+            // Sync if there's a mismatch
+            if (synchronizedDeckCount != Deck.Count)
+            {
+                Debug.LogWarning($"Deck count mismatch detected! Actual: {Deck.Count}, Synchronized: {synchronizedDeckCount}. Syncing...");
+                photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+            }
+            return Deck.Count;
+        }
+        else
+        {
+            // If we're a client, return the synchronized count
+            return synchronizedDeckCount;
+        }
     }
     
     // Phương thức chèn card vào deck tại vị trí chỉ định
     public void InsertCardIntoDeck(CardData card, int position)
     {
+        if (!PhotonNetwork.IsMasterClient)
+        {
+            Debug.LogWarning("Only master client can insert card into deck");
+            return;
+        }
+        
         if (position < 0) position = 0;
         if (position > Deck.Count) position = Deck.Count;
         
         Deck.Insert(position, card);
         
-        // Cập nhật UI deck count
-        photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+        // Đồng bộ deck count với tất cả clients
+        SyncDeckCount();
         
-        Debug.Log($"Đã chèn {card.cardName} vào vị trí {position} trong deck");
+        Debug.Log($"Đã chèn {card.cardName} vào vị trí {position} trong deck. New count: {Deck.Count}");
     }
     
     // Phương thức phát bài ban đầu cho tất cả người chơi
@@ -606,8 +642,8 @@ public class CardManager : MonoBehaviour
         CreateDeck(playerCount);
         ShuffleDeck();
         
-        // Update deck count UI and visual for all clients
-        photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+        // Đồng bộ deck count với tất cả clients
+        SyncDeckCount();
         
         Debug.Log($"Deck recreated for {playerCount} players with {Deck.Count} cards");
         LogSpriteMapping();
@@ -790,8 +826,8 @@ public class CardManager : MonoBehaviour
         // Xáo trộn lại deck
         Deck = Deck.OrderBy(a => Random.value).ToList();
         
-        // Cập nhật số lượng bộ bài
-        photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+        // Đồng bộ deck count với tất cả clients
+        SyncDeckCount();
         
         Debug.Log($"Đã phát xong bài đặc biệt. Deck còn lại: {Deck.Count} lá");
         LogDeckComposition();
@@ -879,5 +915,58 @@ public class CardManager : MonoBehaviour
                 CardEffectManager.Instance.photonView.RPC("RPC_ReceiveFutureCards", requestingPlayer, (object)topCardIndexes.ToArray());
             }
         }
+    }
+
+    // Helper method để đảm bảo deck count được đồng bộ
+    private void SyncDeckCount()
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+            Debug.Log($"[SyncDeckCount] Synced deck count: {Deck.Count}");
+        }
+    }
+    
+    // Method để manually force sync deck count (useful for debugging)
+    [ContextMenu("Force Sync Deck Count")]
+    public void ForceSyncDeckCount()
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log($"[ForceSyncDeckCount] Force syncing - Actual: {Deck.Count}, Synchronized: {synchronizedDeckCount}");
+            SyncDeckCount();
+        }
+        else
+        {
+            Debug.Log($"[ForceSyncDeckCount] Client - Current synchronized count: {synchronizedDeckCount}");
+        }
+    }
+
+    // Debug method để kiểm tra trạng thái đồng bộ deck count
+    [ContextMenu("Debug Deck Count Sync")]
+    public void DebugDeckCountSync()
+    {
+        Debug.Log("=== DECK COUNT SYNC DEBUG ===");
+        Debug.Log($"Is Master Client: {PhotonNetwork.IsMasterClient}");
+        
+        if (PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log($"Actual Deck Count: {Deck.Count}");
+            Debug.Log($"Synchronized Count: {synchronizedDeckCount}");
+            Debug.Log($"Counts Match: {Deck.Count == synchronizedDeckCount}");
+            
+            if (Deck.Count != synchronizedDeckCount)
+            {
+                Debug.LogWarning("MISMATCH DETECTED! Consider calling ForceSyncDeckCount");
+            }
+        }
+        else
+        {
+            Debug.Log($"Client - Synchronized Count: {synchronizedDeckCount}");
+            Debug.Log("Note: Clients don't have access to actual deck data");
+        }
+        
+        Debug.Log($"UI Display Count: {deckCardCount?.text ?? "NULL"}");
+        Debug.Log("==============================");
     }
 }

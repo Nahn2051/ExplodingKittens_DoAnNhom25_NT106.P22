@@ -52,8 +52,7 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
 
     private void Update()
     {
-        ClampPosition();
-
+        // Only clamp position when dragging to avoid unnecessary calculations
         if (isDragging)
         {
             Vector2 targetPosition = Camera.main.ScreenToWorldPoint(Input.mousePosition) - offset;
@@ -61,6 +60,7 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
             float distance = Vector2.Distance(transform.position, targetPosition);
             Vector2 velocity = direction * Mathf.Min(moveSpeedLimit, distance / Time.deltaTime);
             transform.Translate(velocity * Time.deltaTime);
+            ClampPosition();
         }
     }
 
@@ -213,6 +213,15 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
         pointerDownTime = Time.time;
     }
 
+    private PlayCardZone cachedPlayZone;
+    
+    private PlayCardZone GetPlayZone()
+    {
+        if (cachedPlayZone == null)
+            cachedPlayZone = FindObjectOfType<PlayCardZone>();
+        return cachedPlayZone;
+    }
+
     public void OnPointerUp(PointerEventData eventData)
     {
         if (isPlayed) return;
@@ -240,7 +249,7 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
             Debug.Log($"Card {data.effect} DESELECTED");
             
             // Notify PlayCardZone to cleanup deselected cards
-            PlayCardZone playZone = FindObjectOfType<PlayCardZone>();
+            PlayCardZone playZone = GetPlayZone();
             if (playZone != null)
             {
                 playZone.ForceCleanupSelection();
@@ -257,7 +266,7 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
         transform.localPosition = Vector3.zero;
         
         // Notify PlayCardZone to cleanup
-        PlayCardZone playZone = FindObjectOfType<PlayCardZone>();
+        PlayCardZone playZone = GetPlayZone();
         if (playZone != null)
         {
             playZone.ForceCleanupSelection();
