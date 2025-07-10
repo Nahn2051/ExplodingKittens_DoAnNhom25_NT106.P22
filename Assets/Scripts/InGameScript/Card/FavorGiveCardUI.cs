@@ -28,6 +28,9 @@ public class FavorGiveCardUI : MonoBehaviour
     {
         onCardSelected = onSelected;
         gameObject.SetActive(true);
+        transform.SetAsLastSibling(); // Ensure panel is shown on top
+        
+        Debug.Log($"FavorGiveCardUI: Showing panel with {cards.Count} cards");
 
         foreach (Transform child in contentParent)
             Destroy(child.gameObject);
@@ -46,6 +49,12 @@ public class FavorGiveCardUI : MonoBehaviour
                 Debug.Log("🎴 Chọn lá bài: " + card.cardName);
                 gameObject.SetActive(false);
                 onCardSelected?.Invoke(card.cardName); // Gửi về tên bài
+
+                // Ensure UI interactions are restored
+                if (GameManager.Instance != null)
+                {
+                    GameManager.Instance.EnablePlayerInteractions();
+                }
             });
         }
     }

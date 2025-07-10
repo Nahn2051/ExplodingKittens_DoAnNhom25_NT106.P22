@@ -35,27 +35,44 @@ public class GameSetUI : MonoBehaviourPunCallbacks
     
     public void ShowGameOver(string winnerName, bool isLocalPlayerWinner)
     {
+        Debug.Log($"[GameSetUI] ShowGameOver called - Winner: {winnerName}, IsLocalWinner: {isLocalPlayerWinner}");
+        
         if (gameOverPanel != null)
         {
             gameOverPanel.SetActive(true);
+            Debug.Log("[GameSetUI] Game over panel activated");
         }
         
-        // Thiết lập text
+        // Thiết lập text với debug logging
         if (gameOverText != null)
         {
-            gameOverText.text = isLocalPlayerWinner ? "Victory!" : "Game Over";
+            string displayText = isLocalPlayerWinner ? "Victory!" : "Game Over";
+            gameOverText.text = displayText;
+            Debug.Log($"[GameSetUI] Game over text set to: {displayText}");
         }
         
         if (winnerNameText != null)
         {
-            winnerNameText.text = $"Winner: {winnerName}";
+            string winnerDisplayText = $"Winner: {winnerName}";
+            winnerNameText.text = winnerDisplayText;
+            Debug.Log($"[GameSetUI] Winner name text set to: {winnerDisplayText}");
         }
         
-        // Hiển thị background phù hợp
+        // Hiển thị background phù hợp với debug logging
+        bool showWinnerBg = isLocalPlayerWinner;
+        bool showLoserBg = !isLocalPlayerWinner;
+        
         if (winnerBackground != null)
-            winnerBackground.SetActive(isLocalPlayerWinner);
+        {
+            winnerBackground.SetActive(showWinnerBg);
+            Debug.Log($"[GameSetUI] Winner background set to: {showWinnerBg}");
+        }
+        
         if (loserBackground != null)
-            loserBackground.SetActive(!isLocalPlayerWinner);
+        {
+            loserBackground.SetActive(showLoserBg);
+            Debug.Log($"[GameSetUI] Loser background set to: {showLoserBg}");
+        }
         
         // Phát hiệu ứng
         if (isLocalPlayerWinner)
@@ -69,6 +86,8 @@ public class GameSetUI : MonoBehaviourPunCallbacks
         
         // Animation fade in
         StartCoroutine(FadeInGameOverPanel());
+        
+        Debug.Log("[GameSetUI] ShowGameOver setup completed");
     }
     
     private void PlayWinnerEffects()

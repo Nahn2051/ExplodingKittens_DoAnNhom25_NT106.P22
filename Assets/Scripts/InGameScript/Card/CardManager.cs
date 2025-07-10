@@ -18,13 +18,15 @@ public class CardManager : MonoBehaviour
     private List<CardData> Deck = new List<CardData>();
     private PhotonView photonView;
     
+    // Deck count synchronized across all clients
+    private int synchronizedDeckCount = 0;
+    
     // Card quantities based on player count [2,3,4,5 players]
     private int[,] cardQuantitiesByPlayers = {
         {1, 2, 3, 4},  // EXPLODING KITTEN
         {3, 4, 6, 7},  // DEFUSE
         {3, 4, 5, 6},  // ATTACK (2X)
         {1, 2, 4, 6},  // FAVOR
-        {2, 3, 4, 5},  // NOPE
         {2, 3, 4, 5},  // SHUFFLE
         {3, 3, 4, 6},  // SKIP
         {3, 4, 4, 5},  // SEE THE FUTURE (3X)
@@ -36,7 +38,7 @@ public class CardManager : MonoBehaviour
     };
     
     // Sprite indices for each card type - base indices
-    private int[] cardSpriteIndices = {0, 4, 10, 14, 18, 23, 27, 31, 36, 37, 38, 39, 40};
+    private int[] cardSpriteIndices = {0, 4, 10, 14, 23, 27, 31, 36, 37, 38, 39, 40};
     
     // Sprite ranges for each card type [start, end] - for cards that need different sprites
     private int[,] cardSpriteRanges = {
@@ -44,7 +46,6 @@ public class CardManager : MonoBehaviour
         {4, 9},   // DEFUSE (4-9)
         {10, 13}, // ATTACK (10-13)
         {14, 17}, // FAVOR (14-17)
-        {18, 22}, // NOPE (18-22)
         {23, 26}, // SHUFFLE (23-26)
         {27, 30}, // SKIP (27-30)
         {31, 35}, // SEE THE FUTURE (31-35)
@@ -103,7 +104,7 @@ public class CardManager : MonoBehaviour
         
         // Card names corresponding to each row in the table
         string[] cardNames = {
-            "Exploding", "Defuse", "Attack", "Favor", "Nope", 
+            "Exploding", "Defuse", "Attack", "Favor",
             "Shuffle", "Skip", "SeeTheFuture", "HairyPotatoCat", 
             "BeardCat", "Cattermelon", "Tacocat", "RainbowRalphingCat"
         };
@@ -150,6 +151,10 @@ public class CardManager : MonoBehaviour
         }
         
         Debug.Log($"Deck created with {Deck.Count} cards");
+        
+        // Update synchronized deck count for all clients
+        synchronizedDeckCount = Deck.Count;
+        
         LogSpriteMapping();
         LogDeckComposition();
         CheckDeckVisualSetup();
@@ -193,6 +198,11 @@ public class CardManager : MonoBehaviour
     [PunRPC]
     public void RPC_UpdateDeckCount(int count)
     {
+        // Update synchronized deck count for all clients (including master client)
+        synchronizedDeckCount = count;
+        
+        Debug.Log($"[RPC_UpdateDeckCount] Synchronized deck count updated to {count}");
+        
         if (deckCardCount != null)
         {
             deckCardCount.text = count.ToString();
@@ -240,6 +250,9 @@ public class CardManager : MonoBehaviour
                 data.effect, 
                 playerActorNumber,
                 Deck.Count);
+            
+            // Đồng bộ deck count sau khi rút bài
+            SyncDeckCount();
         }
     }
     
@@ -296,10 +309,10 @@ public class CardManager : MonoBehaviour
                 GameManager.Instance.UpdatePlayerCardCount();
             }
             
-            // Thông báo CardEffectManager về việc rút bài để reset Nope state
+            // Thông báo CardEffectManager về việc rút bài
             if (CardEffectManager.Instance != null)
             {
-                NopeManager.Instance.OnPlayerDrawCard();
+                // Có thể thêm xử lý khi người chơi rút bài nếu cần
             }
         }
         
@@ -367,25 +380,14 @@ public class CardManager : MonoBehaviour
         
         // Kiểm tra xem có phải lượt của người chơi không
         bool isPlayerTurn = GameManager.Instance.IsLocalPlayerTurn();
-        bool isNopeCard = (card.data.effect == "Nope");
         
-        // Nope có thể được chơi bất cứ lúc nào (không cần phải đến lượt)
-        // miễn là có cửa sổ Nope đang mở
-        if (isNopeCard)
-        {
-            if (!NopeManager.IsCanPlayNope)
-            {
-                Debug.LogWarning("Cannot play Nope - no Nope window is currently open!");
-                return;
-            }
-        }
-        else if (!isPlayerTurn)
+        if (!isPlayerTurn)
         {
             Debug.LogWarning($"Cannot play card - not your turn! Current turn: {currentTurnIndex}, Local player: {localPlayerIndex}");
             return;
         }
         
-        if (isPlayerTurn || isNopeCard)
+        if (isPlayerTurn)
         {
             Debug.Log($"Player {playerActorNumber} is playing card {card.data.cardName}");
             
@@ -456,21 +458,42 @@ public class CardManager : MonoBehaviour
     // Phương thức trả về số lượng bài còn lại trong bộ bài
     public int GetDeckCount()
     {
-        return Deck.Count;
+        // If we're the master client, return the actual deck count and sync if needed
+        if (PhotonNetwork.IsMasterClient)
+        {
+            // Sync if there's a mismatch
+            if (synchronizedDeckCount != Deck.Count)
+            {
+                Debug.LogWarning($"Deck count mismatch detected! Actual: {Deck.Count}, Synchronized: {synchronizedDeckCount}. Syncing...");
+                photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+            }
+            return Deck.Count;
+        }
+        else
+        {
+            // If we're a client, return the synchronized count
+            return synchronizedDeckCount;
+        }
     }
     
     // Phương thức chèn card vào deck tại vị trí chỉ định
     public void InsertCardIntoDeck(CardData card, int position)
     {
+        if (!PhotonNetwork.IsMasterClient)
+        {
+            Debug.LogWarning("Only master client can insert card into deck");
+            return;
+        }
+        
         if (position < 0) position = 0;
         if (position > Deck.Count) position = Deck.Count;
         
         Deck.Insert(position, card);
         
-        // Cập nhật UI deck count
-        photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+        // Đồng bộ deck count với tất cả clients
+        SyncDeckCount();
         
-        Debug.Log($"Đã chèn {card.cardName} vào vị trí {position} trong deck");
+        Debug.Log($"Đã chèn {card.cardName} vào vị trí {position} trong deck. New count: {Deck.Count}");
     }
     
     // Phương thức phát bài ban đầu cho tất cả người chơi
@@ -619,8 +642,8 @@ public class CardManager : MonoBehaviour
         CreateDeck(playerCount);
         ShuffleDeck();
         
-        // Update deck count UI and visual for all clients
-        photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+        // Đồng bộ deck count với tất cả clients
+        SyncDeckCount();
         
         Debug.Log($"Deck recreated for {playerCount} players with {Deck.Count} cards");
         LogSpriteMapping();
@@ -675,7 +698,7 @@ public class CardManager : MonoBehaviour
     public void LogSpriteMapping()
     {
         string[] cardNames = {
-            "Exploding", "Defuse", "Attack", "Favor", "Nope", 
+            "Exploding", "Defuse", "Attack", "Favor",
             "Shuffle", "Skip", "SeeTheFuture", "HairyPotatoCat", 
             "BeardCat", "Cattermelon", "Tacocat", "RainbowRalphingCat"
         };
@@ -803,8 +826,8 @@ public class CardManager : MonoBehaviour
         // Xáo trộn lại deck
         Deck = Deck.OrderBy(a => Random.value).ToList();
         
-        // Cập nhật số lượng bộ bài
-        photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+        // Đồng bộ deck count với tất cả clients
+        SyncDeckCount();
         
         Debug.Log($"Đã phát xong bài đặc biệt. Deck còn lại: {Deck.Count} lá");
         LogDeckComposition();
@@ -892,5 +915,58 @@ public class CardManager : MonoBehaviour
                 CardEffectManager.Instance.photonView.RPC("RPC_ReceiveFutureCards", requestingPlayer, (object)topCardIndexes.ToArray());
             }
         }
+    }
+
+    // Helper method để đảm bảo deck count được đồng bộ
+    private void SyncDeckCount()
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            photonView.RPC("RPC_UpdateDeckCount", RpcTarget.All, Deck.Count);
+            Debug.Log($"[SyncDeckCount] Synced deck count: {Deck.Count}");
+        }
+    }
+    
+    // Method để manually force sync deck count (useful for debugging)
+    [ContextMenu("Force Sync Deck Count")]
+    public void ForceSyncDeckCount()
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log($"[ForceSyncDeckCount] Force syncing - Actual: {Deck.Count}, Synchronized: {synchronizedDeckCount}");
+            SyncDeckCount();
+        }
+        else
+        {
+            Debug.Log($"[ForceSyncDeckCount] Client - Current synchronized count: {synchronizedDeckCount}");
+        }
+    }
+
+    // Debug method để kiểm tra trạng thái đồng bộ deck count
+    [ContextMenu("Debug Deck Count Sync")]
+    public void DebugDeckCountSync()
+    {
+        Debug.Log("=== DECK COUNT SYNC DEBUG ===");
+        Debug.Log($"Is Master Client: {PhotonNetwork.IsMasterClient}");
+        
+        if (PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log($"Actual Deck Count: {Deck.Count}");
+            Debug.Log($"Synchronized Count: {synchronizedDeckCount}");
+            Debug.Log($"Counts Match: {Deck.Count == synchronizedDeckCount}");
+            
+            if (Deck.Count != synchronizedDeckCount)
+            {
+                Debug.LogWarning("MISMATCH DETECTED! Consider calling ForceSyncDeckCount");
+            }
+        }
+        else
+        {
+            Debug.Log($"Client - Synchronized Count: {synchronizedDeckCount}");
+            Debug.Log("Note: Clients don't have access to actual deck data");
+        }
+        
+        Debug.Log($"UI Display Count: {deckCardCount?.text ?? "NULL"}");
+        Debug.Log("==============================");
     }
 }

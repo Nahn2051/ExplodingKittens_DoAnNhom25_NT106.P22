@@ -12,9 +12,17 @@ public class SeeTheFutureUI : MonoBehaviour
     [Header("UI References")]
     [SerializeField] private GameObject seeTheFuturePanel;
     [SerializeField] private List<Image> cardDisplayImages;
+    [SerializeField] private Button closeButton; // Optional close button reference
 
     [Header("Settings")]
-    [SerializeField] private float displayDuration = 4.0f; // Thời gian hiển thị panel
+    [SerializeField] private float displayDuration = 3.0f; // Reducing from 4.0 to 3.0 seconds
+
+    // Event to signal when the effect is complete
+    public System.Action OnSeeTheFutureComplete;
+    
+    // Track whether the panel is currently active
+    private bool isPanelActive = false;
+    private Coroutine activeCoroutine = null;
 
     private void Awake()
     {
@@ -34,12 +42,29 @@ public class SeeTheFutureUI : MonoBehaviour
         if (seeTheFuturePanel != null)
         {
             seeTheFuturePanel.SetActive(false);
+            isPanelActive = false;
+        }
+        
+        // Set up close button if available
+        if (closeButton != null)
+        {
+            closeButton.onClick.AddListener(() => {
+                ForceClosePanel();
+                Debug.Log("Close button clicked on SeeTheFuture panel");
+            });
         }
     }
 
     // Hàm này sẽ được gọi bởi CardEffectManager
     public void ShowFutureCards(int[] spriteIndexes)
     {
+        // If there's an active coroutine, stop it first
+        if (activeCoroutine != null)
+        {
+            StopCoroutine(activeCoroutine);
+            activeCoroutine = null;
+        }
+        
         // Lấy danh sách tất cả các sprite từ CardManager
         Sprite[] allSprites = CardManager.Instance.allCardSprites;
 
@@ -75,16 +100,63 @@ public class SeeTheFutureUI : MonoBehaviour
         }
 
         // Bắt đầu Coroutine để hiển thị và tự động ẩn panel
-        StartCoroutine(ShowAndHidePanel());
+        activeCoroutine = StartCoroutine(ShowAndHidePanel());
     }
 
     private IEnumerator ShowAndHidePanel()
     {
         if (seeTheFuturePanel != null)
         {
+            // Show panel
             seeTheFuturePanel.SetActive(true);
+            isPanelActive = true;
+            
+            Debug.Log("SeeTheFuture panel shown");
             yield return new WaitForSeconds(displayDuration);
-            seeTheFuturePanel.SetActive(false);
+            
+            // Hide panel and notify that effect is complete
+            ClosePanel();
         }
+        
+        activeCoroutine = null;
+    }
+    
+    // Close the panel and invoke completion event
+    private void ClosePanel()
+    {
+        if (seeTheFuturePanel != null)
+        {
+            seeTheFuturePanel.SetActive(false);
+            isPanelActive = false;
+            
+            Debug.Log("SeeTheFuture panel hidden");
+            
+            // Notify any listeners that the effect is complete
+            OnSeeTheFutureComplete?.Invoke();
+            
+            // Re-enable interactions via GameManager
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.EnablePlayerInteractions();
+            }
+        }
+    }
+    
+    // Public method to force-close the panel if needed
+    public void ForceClosePanel()
+    {
+        if (activeCoroutine != null)
+        {
+            StopCoroutine(activeCoroutine);
+            activeCoroutine = null;
+        }
+        
+        ClosePanel();
+    }
+    
+    // Check if the panel is currently active
+    public bool IsPanelActive()
+    {
+        return isPanelActive;
     }
 }

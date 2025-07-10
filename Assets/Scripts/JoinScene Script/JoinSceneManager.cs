@@ -30,51 +30,119 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
     public int playerLimit = 5;
     
     private bool _isJoiningOrHosting = false;
+    private bool _isInitialized = false;
 
     void Awake()
     {
-        // Đảm bảo rằng đã ngắt kết nối Photon nếu đã kết nối trước đó
-        if (PhotonNetwork.IsConnected)
+        Debug.Log("JoinSceneManager Awake - Checking Photon connection status");
+        
+        // Đảm bảo rằng đã ngắt kết nối hoàn toàn khỏi Photon nếu đã kết nối trước đó
+        if (PhotonNetwork.IsConnected || PhotonNetwork.InRoom)
         {
-            Debug.Log("Đã kết nối Photon - ngắt kết nối trước khi bắt đầu lại");
-            StartCoroutine(DisconnectFromPhoton());
+            Debug.Log($"Photon đang kết nối - IsConnected: {PhotonNetwork.IsConnected}, InRoom: {PhotonNetwork.InRoom}, InLobby: {PhotonNetwork.InLobby}");
+            Debug.Log("Đang thực hiện ngắt kết nối hoàn toàn...");
+            StartCoroutine(CompleteDisconnectFromPhoton());
+        }
+        else
+        {
+            Debug.Log("Photon chưa kết nối - có thể khởi tạo ngay");
+            _isInitialized = true;
         }
     }
     
-    private IEnumerator DisconnectFromPhoton()
+    private IEnumerator CompleteDisconnectFromPhoton()
     {
-        Debug.Log("Đang ngắt kết nối Photon");
-        PhotonNetwork.Disconnect();
+        Debug.Log("Bắt đầu quá trình ngắt kết nối hoàn toàn");
         
-        // Đợi cho đến khi ngắt kết nối hoàn toàn
-        float timeout = 5f;
-        float elapsed = 0f;
-        
-        while (elapsed < timeout && PhotonNetwork.IsConnected)
+        // Bước 1: Thoát khỏi room nếu đang trong room
+        if (PhotonNetwork.InRoom)
         {
-            Debug.Log("Đang đợi Photon ngắt kết nối...");
-            elapsed += 0.1f;
-            yield return new WaitForSeconds(0.1f);
+            Debug.Log("Đang trong room - thoát khỏi room trước");
+            PhotonNetwork.LeaveRoom();
+            
+            // Đợi cho đến khi thoát khỏi room
+            float roomTimeout = 3f;
+            float roomElapsed = 0f;
+            
+            while (roomElapsed < roomTimeout && PhotonNetwork.InRoom)
+            {
+                Debug.Log("Đang đợi thoát khỏi room...");
+                roomElapsed += 0.1f;
+                yield return new WaitForSeconds(0.1f);
+            }
+            
+            if (PhotonNetwork.InRoom)
+            {
+                Debug.LogWarning("Quá thời gian thoát khỏi room - thực hiện disconnect cưỡng bức");
+            }
+            else
+            {
+                Debug.Log("Đã thoát khỏi room thành công");
+            }
         }
         
+        // Bước 2: Ngắt kết nối hoàn toàn khỏi Photon
         if (PhotonNetwork.IsConnected)
         {
-            Debug.LogWarning("Quá thời gian ngắt kết nối Photon");
+            Debug.Log("Đang ngắt kết nối khỏi Photon Master Server");
+            PhotonNetwork.Disconnect();
+            
+            // Đợi cho đến khi ngắt kết nối hoàn toàn
+            float connectionTimeout = 5f;
+            float connectionElapsed = 0f;
+            
+            while (connectionElapsed < connectionTimeout && PhotonNetwork.IsConnected)
+            {
+                Debug.Log($"Đang đợi Photon ngắt kết nối... Status: {PhotonNetwork.NetworkClientState}");
+                connectionElapsed += 0.1f;
+                yield return new WaitForSeconds(0.1f);
+            }
+            
+            if (PhotonNetwork.IsConnected)
+            {
+                Debug.LogWarning("Quá thời gian ngắt kết nối Photon - có thể cần restart ứng dụng");
+            }
+            else
+            {
+                Debug.Log("Đã ngắt kết nối Photon thành công");
+            }
         }
         
-        Debug.Log("Đã ngắt kết nối Photon thành công");
+        Debug.Log($"Trạng thái cuối cùng - IsConnected: {PhotonNetwork.IsConnected}, InRoom: {PhotonNetwork.InRoom}, NetworkState: {PhotonNetwork.NetworkClientState}");
+        _isInitialized = true;
     }
     
     private void Start()
     {
+        // Vô hiệu hóa các nút cho đến khi sẵn sàng
         hostButton.interactable = false;
         joinButton.interactable = false;
         avatarButton.interactable = false;
+        
+        StartCoroutine(WaitForInitializationAndConnect());
+    }
+    
+    private IEnumerator WaitForInitializationAndConnect()
+    {
+        // Đợi cho đến khi quá trình disconnect hoàn tất
+        while (!_isInitialized)
+        {
+            Debug.Log("Đang đợi quá trình disconnect hoàn tất...");
+            yield return new WaitForSeconds(0.1f);
+        }
+        
+        Debug.Log("Quá trình disconnect hoàn tất - bắt đầu kết nối mới");
+        
         // Thiết lập kết nối với Photon Cloud
         if (!PhotonNetwork.IsConnected)
         {
+            Debug.Log("Bắt đầu kết nối đến Photon với settings mới...");
             PhotonNetwork.ConnectUsingSettings();
-            Debug.Log("Đang kết nối đến Photon...");
+        }
+        else
+        {
+            Debug.Log("Photon đã kết nối - bật các nút");
+            EnableButtons();
         }
         
         SetupUIListeners();
@@ -92,6 +160,7 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
 
         float vol = PlayerPrefs.GetFloat("MusicVol", 0.75f); // Giá trị mặc định 0.75
         MainAudioMixer.SetFloat("MusicVol", vol);
+        
         if (FirebaseAuth.DefaultInstance.CurrentUser != null)
         {
             string firebaseUserId = FirebaseAuth.DefaultInstance.CurrentUser.UserId;
@@ -104,6 +173,14 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
         {
             Debug.LogWarning("Chưa đăng nhập Firebase! UserId không có.");
         }
+    }
+    
+    private void EnableButtons()
+    {
+        hostButton.interactable = true;
+        joinButton.interactable = true;
+        avatarButton.interactable = true;
+        Debug.Log("Đã bật tất cả các nút - sẵn sàng tạo/tham gia phòng");
     }
     void Update()
     {
@@ -260,17 +337,39 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
     
     public override void OnConnectedToMaster()
     {
-        Debug.Log("Đã kết nối đến Photon Master Server");
-        hostButton.interactable = true;
-        joinButton.interactable = true;
+        Debug.Log("Đã kết nối đến Photon Master Server - sẵn sàng tạo/tham gia phòng");
+        EnableButtons();
     }
     
     public override void OnDisconnected(DisconnectCause cause)
     {
         Debug.LogWarning($"Đã ngắt kết nối khỏi Photon: {cause}");
-        hostButton.interactable = true;
-        joinButton.interactable = true;
+        
+        // Reset trạng thái
         _isJoiningOrHosting = false;
+        
+        // Vô hiệu hóa nút để ngăn spam
+        hostButton.interactable = false;
+        joinButton.interactable = false;
+        avatarButton.interactable = false;
+        
+        // Nếu disconnect không mong muốn, thử kết nối lại
+        if (cause != DisconnectCause.DisconnectByClientLogic && cause != DisconnectCause.ApplicationQuit)
+        {
+            Debug.Log("Disconnect không mong muốn - thử kết nối lại sau 2 giây");
+            StartCoroutine(ReconnectAfterDelay(2f));
+        }
+    }
+    
+    private IEnumerator ReconnectAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        if (!PhotonNetwork.IsConnected && !_isJoiningOrHosting)
+        {
+            Debug.Log("Thử kết nối lại đến Photon...");
+            PhotonNetwork.ConnectUsingSettings();
+        }
     }
     
     public override void OnCreatedRoom()
@@ -301,5 +400,24 @@ public class JoinSceneManager : MonoBehaviourPunCallbacks
             noRoomFoundText.gameObject.SetActive(true);
         joinButton.interactable = true;
         _isJoiningOrHosting = false;
+    }
+
+    public override void OnLeftRoom()
+    {
+        Debug.Log("Đã thoát khỏi room thành công");
+    }
+    
+    public override void OnPlayerLeftRoom(Photon.Realtime.Player otherPlayer)
+    {
+        Debug.Log($"Người chơi {otherPlayer.NickName} đã thoát khỏi room");
+    }
+    
+    // Method để manually disconnect (có thể gọi từ UI nếu cần)
+    [ContextMenu("Force Disconnect")]
+    public void ForceDisconnect()
+    {
+        Debug.Log("Thực hiện ngắt kết nối cưỡng bức");
+        _isInitialized = false;
+        StartCoroutine(CompleteDisconnectFromPhoton());
     }
 }

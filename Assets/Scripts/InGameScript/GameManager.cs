@@ -15,7 +15,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     [SerializeField] private GameObject playerSlotPrefab;
     [SerializeField] private Transform playerSlotsContainer;
     [SerializeField] private GameObject drawCardButton;
-    [SerializeField] private Button drawCardButtonComponent;
+    [SerializeField] public Button drawCardButtonComponent; // Made public for external access
     [SerializeField] private Color activePlayerColor = Color.green;
     [SerializeField] private Color inactivePlayerColor = Color.white;
     
@@ -30,7 +30,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     private List<int> eliminatedPlayerIds = new List<int>();
     
     [Header("Turn Management")]
-    private bool isExplodingInProgress = false;
+    public bool isExplodingInProgress = false; // Made public for external access
     
     [Header("Effect States")]
     private int attackTurns = 1; // Số lượt phải chơi, bình thường là 1, bị Attack sẽ là 2
@@ -197,10 +197,10 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     private IEnumerator ProcessTurnAfterDrawing()
     {
-        // Thông báo CardEffectManager rằng có người rút bài (để reset Nope window cho Attack/Skip)
+        // Thông báo CardEffectManager rằng có người rút bài
         if (CardEffectManager.Instance != null)
         {
-            NopeManager.Instance.OnPlayerDrawCard();
+            // Có thể thêm xử lý khi người chơi rút bài nếu cần
         }
         
         // Giảm thời gian chờ từ 0.5s xuống 0.1s
@@ -667,7 +667,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         return count;
     }
 
-    // Add this method for NopeManager/Skip effect
+    // Phương thức để quay lại lượt của một người chơi cụ thể
     public void ReturnTurnToPlayer(int playerId)
     {
         // Find the index of the player in playerList by ActorNumber
@@ -681,5 +681,162 @@ public class GameManager : MonoBehaviourPunCallbacks
         {
             Debug.LogWarning($"ReturnTurnToPlayer: playerId {playerId} not found in playerList");
         }
+    }
+    
+    // Flag to prevent multiple simultaneous UI restoration calls
+    private bool isRestoringUI = false;
+    
+    // Method to explicitly re-enable player interactions
+    // Can be called after UI effects that might block interaction
+    public void EnablePlayerInteractions()
+    {
+        // Prevent multiple simultaneous restoration calls
+        if (isRestoringUI)
+        {
+            Debug.Log("UI restoration already in progress, skipping duplicate call");
+            return;
+        }
+        
+        isRestoringUI = true;
+        Debug.Log("Explicitly enabling player interactions");
+        
+        // Re-enable drawing cards if it's the player's turn
+        bool isLocalTurn = IsLocalPlayerTurn();
+        if (drawCardButtonComponent != null)
+        {
+            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress;
+        }
+        
+        // IMPORTANT: Always enable card interactions for the local player
+        // This allows them to continue playing cards even if it's not their draw turn
+        if (CardHolder.Instance != null)
+        {
+            CardHolder.Instance.EnableCardInteraction(true);
+            Debug.Log("Card interactions enabled for local player regardless of turn");
+        }
+        
+        // Ensure all UI blocking elements are properly cleaned up
+        if (SeeTheFutureUI.Instance != null && SeeTheFutureUI.Instance.IsPanelActive())
+        {
+            SeeTheFutureUI.Instance.ForceClosePanel();
+        }
+        
+        // Only close Favor UI panels if they're not actively being used
+        // Check if favor UI should remain open
+        bool shouldCloseFavorUI = true;
+        if (FavorTargetSelectUI.Instance != null && FavorTargetSelectUI.Instance.gameObject.activeInHierarchy)
+        {
+            // Don't close if the target selection is currently active
+            shouldCloseFavorUI = false;
+            Debug.Log("Favor target selection UI is active, keeping it open");
+        }
+        
+        if (shouldCloseFavorUI)
+        {
+            // Hide Favor UI panels
+            if (FavorTargetSelectUI.Instance != null)
+            {
+                FavorTargetSelectUI.Instance.gameObject.SetActive(false);
+            }
+            
+            if (FavorGiveCardUI.Instance != null)
+            {
+                FavorGiveCardUI.Instance.gameObject.SetActive(false);
+            }
+        }
+        
+        // Reset card effect UI
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideEffect();
+            CardEffectManager.Instance.HideAllComboPanels();
+            CardEffectManager.Instance.HideExplodingPanels();
+        }
+        
+        Debug.Log("All UI interactions should now be restored");
+        
+        // Reset the restoration flag
+        isRestoringUI = false;
+    }
+
+    // Method to enable UI interactions without closing active dialogs
+    public void EnableUIInteractionsOnly()
+    {
+        Debug.Log("Enabling UI interactions only (keeping active dialogs open)");
+        
+        // Re-enable drawing cards if it's the player's turn
+        bool isLocalTurn = IsLocalPlayerTurn();
+        if (drawCardButtonComponent != null)
+        {
+            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress;
+        }
+        
+        // If this is the local player's turn, make sure their cards are interactive
+        if (isLocalTurn && CardHolder.Instance != null)
+        {
+            CardHolder.Instance.EnableCardInteraction(true);
+        }
+        
+        Debug.Log("UI interactions enabled without closing dialogs");
+    }
+    
+    // Method to force enable all UI interactions (for combo panels)
+    public void ForceEnableAllUIInteractions()
+    {
+        Debug.Log("Force enabling ALL UI interactions for combo panels");
+        
+        // Enable all canvas components
+        Canvas[] allCanvases = FindObjectsOfType<Canvas>();
+        foreach (Canvas canvas in allCanvases)
+        {
+            canvas.enabled = true;
+            GraphicRaycaster raycaster = canvas.GetComponent<GraphicRaycaster>();
+            if (raycaster != null)
+            {
+                raycaster.enabled = true;
+            }
+        }
+        
+        // Enable all buttons
+        Button[] allButtons = FindObjectsOfType<Button>();
+        foreach (Button button in allButtons)
+        {
+            button.interactable = true;
+        }
+        
+        Debug.Log($"Force enabled {allCanvases.Length} canvases and {allButtons.Length} buttons");
+    }
+
+    // Debug method to check current UI state
+    [ContextMenu("Debug UI State")]
+    public void DebugUIState()
+    {
+        Debug.Log("=== UI STATE DEBUG ===");
+        Debug.Log($"Is Local Player Turn: {IsLocalPlayerTurn()}");
+        Debug.Log($"Current Turn Index: {currentTurnIndex}");
+        Debug.Log($"Local Player Index: {localPlayerIndex}");
+        Debug.Log($"Is Exploding In Progress: {isExplodingInProgress}");
+        Debug.Log($"Is Restoring UI: {isRestoringUI}");
+        
+        if (drawCardButtonComponent != null)
+        {
+            Debug.Log($"Draw Card Button Interactable: {drawCardButtonComponent.interactable}");
+        }
+        else
+        {
+            Debug.Log("Draw Card Button Component: NULL");
+        }
+        
+        if (CardHolder.Instance != null)
+        {
+            Debug.Log($"CardHolder Instance Available: True");
+            Debug.Log($"Number of cards in hand: {CardHolder.Instance.Cards.Count}");
+        }
+        else
+        {
+            Debug.Log("CardHolder Instance: NULL");
+        }
+        
+        Debug.Log("======================");
     }
 }

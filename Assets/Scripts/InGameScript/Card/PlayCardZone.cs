@@ -4,6 +4,7 @@ using DG.Tweening;
 using UnityEngine.UI;
 using System.Collections;
 using UnityEngine.EventSystems;
+using System.Linq;
 
 public class PlayCardZone : MonoBehaviour, IDropHandler
 {
@@ -33,44 +34,18 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
         // Safety check để tránh duplicate processing
         if (isProcessingCard) 
         {
-            Debug.Log("Already processing a card, ignoring OnDrop");
             return;
         }
 
         // Kiểm tra nếu exploding đang diễn ra
         if (CardEffectManager.IsExplodingInProgress)
         {
-            Debug.Log("Cannot play cards to PlayZone while someone is handling Exploding!");
             return;
         }
 
         if (!GameManager.Instance.IsLocalPlayerTurn())
         {
-            // Kiểm tra nếu là thẻ Nope - có thể chơi bất cứ lúc nào
-            GameObject checkDraggedObject = eventData.pointerDrag;
-            if (checkDraggedObject != null)
-            {
-                Card draggedCard = checkDraggedObject.GetComponent<Card>();
-                if (draggedCard != null && draggedCard.data.effect == "Nope")
-                {
-                    if (!NopeManager.IsCanPlayNope)
-                    {
-                        Debug.Log("Cannot play Nope - no Nope window is open!");
-                        return;
-                    }
-                    // Cho phép Nope tiếp tục
-                }
-                else
-                {
-                    Debug.Log("Cannot play cards - not your turn!");
-                    return;
-                }
-            }
-            else
-            {
-                Debug.Log("Cannot play cards - not your turn!");
-                return;
-            }
+            return;
         }
 
         GameObject draggedObject = eventData.pointerDrag;
@@ -82,7 +57,6 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                 // VALIDATE CARD FIRST - TRƯỚC KHI SET PROCESSING FLAG
                 if (!IsCardValidForPlayZone(draggedCard))
                 {
-                    Debug.LogWarning($"Card {draggedCard.data.cardName} ({draggedCard.data.effect}) is not valid for PlayZone!");
                     return;
                 }
 
@@ -90,24 +64,15 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                 
                 try 
                 {
-                    Debug.Log($"OnDrop: Processing card {draggedCard.data.effect}");
-                    
                     // CRITICAL: Cleanup deselected cards FIRST
                     CleanupDeselectedCards();
-                    DebugComboState();
                     
                     // Lấy tất cả cards đã selected AFTER cleanup
                     List<Card> allSelectedCards = GetAllSelectedCards();
                     
-                    Debug.Log($"OnDrop: After cleanup, found {allSelectedCards.Count} selected cards");
-                    
                     // Kiểm tra xem có combo đang được chọn không
                     if (allSelectedCards.Count > 0)
                     {
-                        Debug.Log($"Found existing selection with {allSelectedCards.Count} cards of type {allSelectedCards[0].data.effect}");
-                        
-                        // selectedComboCards đã được sync trong GetAllSelectedCards()
-                        
                         // Nếu drag card không phải là part of combo, thêm vào combo
                         if (!selectedComboCards.Contains(draggedCard))
                         {
@@ -116,11 +81,9 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                             {
                                 selectedComboCards.Add(draggedCard);
                                 draggedCard.selected = true;
-                                Debug.Log($"Added card {draggedCard.data.effect} to combo. Total: {selectedComboCards.Count}");
                             }
                             else
                             {
-                                Debug.LogWarning($"Cannot add {draggedCard.data.effect} to combo of {selectedComboCards[0].data.effect}!");
                                 return;
                             }
                         }
@@ -131,18 +94,12 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                         // Kiểm tra và thực hiện combo nếu đủ điều kiện
                         if (selectedComboCards.Count >= 2 && IsValidCombo(selectedComboCards))
                         {
-                            Debug.Log($"Valid combo detected: {selectedComboCards.Count} cards of {selectedComboCards[0].data.effect}");
                             // Chỉ thực hiện combo nếu đủ 2-3 lá cùng loại
                             HandleComboPlay();
                         }
                         else if (selectedComboCards.Count > 3)
                         {
-                            Debug.LogWarning("Combo cannot have more than 3 cards!");
                             ResetComboSelection();
-                        }
-                        else
-                        {
-                            Debug.Log($"Combo not ready yet: {selectedComboCards.Count}/2 cards");
                         }
                     }
                     else
@@ -158,17 +115,12 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                             // Normal cards bắt đầu combo selection
                             selectedComboCards.Add(draggedCard);
                             draggedCard.selected = true;
-                            Debug.Log($"Started combo selection with {draggedCard.data.effect}. Need 1-2 more cards.");
                             
                             // Show helpful UI message
                             if (CardEffectManager.Instance != null)
                             {
                                 CardEffectManager.Instance.ShowComboSelectionStatus(selectedComboCards.Count, draggedCard.data.effect);
                             }
-                        }
-                        else
-                        {
-                            Debug.LogWarning($"Card {draggedCard.data.effect} cannot be played individually!");
                         }
                     }
                 }
@@ -294,16 +246,8 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                 return;
             }
             
-            // Đặc biệt cho Nope: có thể chơi bất cứ lúc nào khi có Nope window
-            if (card.data.effect == "Nope")
-            {
-                if (!NopeManager.IsCanPlayNope)
-                {
-                    Debug.LogWarning("Cannot play Nope - no Nope window is open!");
-                    return;
-                }
-            }
-            else if (!GameManager.Instance.IsLocalPlayerTurn())
+            // Kiểm tra xem có phải lượt của người chơi không
+            if (!GameManager.Instance.IsLocalPlayerTurn())
             {
                 Debug.LogWarning("Cannot play action cards - not your turn!");
                 return;
@@ -333,13 +277,10 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
         // Validate combo
         if (!IsValidCombo(selectedComboCards))
         {
-            Debug.LogWarning("Invalid combo! Cannot execute.");
             ShowComboErrorMessage();
             ResetComboSelection();
             return;
         }
-
-        Debug.Log($"Executing combo: {selectedComboCards.Count} cards of {selectedComboCards[0].data.effect}");
         
         // Send combo to CardEffectManager for UI handling
         if (CardEffectManager.Instance != null)
@@ -347,13 +288,17 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
             CardEffectManager.Instance.HandleNormalCardCombo(new List<Card>(selectedComboCards));
         }
         
-        // Play all combo cards through CardManager
-        List<Card> cardsToPlay = new List<Card>(selectedComboCards);
+        // Remove combo cards from hand through CardManager
+        List<Card> cardsToRemove = new List<Card>(selectedComboCards);
         ResetComboSelection(); // Reset first to prevent conflicts
         
-        foreach (Card card in cardsToPlay)
+        // Remove cards from hand without triggering individual effects
+        foreach (Card card in cardsToRemove)
         {
-            PlaySingleCard(card);
+            if (CardManager.Instance != null && CardManager.Instance.cardHolder != null)
+            {
+                CardManager.Instance.cardHolder.RemoveCard(card);
+            }
         }
     }
 
@@ -376,8 +321,11 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
 
     private void ShowComboErrorMessage()
     {
-        // Hiển thị thông báo lỗi combo
-        Debug.LogWarning("Invalid combo: Must have 2-3 Normal cards of the same type!");
+        // Hiển thị thông báo lỗi combo - reduced redundancy
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.ShowComboHelpMessage();
+        }
     }
 
     private bool IsNormalCard(string cardType)
@@ -393,58 +341,25 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
         
         // Kiểm tra tất cả các thẻ có cùng loại không
         string firstCardType = selectedComboCards[0].data.effect;
-        bool allSameType = true;
-        
-        foreach (Card card in selectedComboCards)
-        {
-            if (card.data.effect != firstCardType)
-            {
-                allSameType = false;
-                break;
-            }
-        }
+        bool allSameType = selectedComboCards.All(card => card.data.effect == firstCardType);
         
         if (allSameType && (selectedComboCards.Count == 2 || selectedComboCards.Count == 3))
         {
             // Combo hợp lệ - thực hiện
-            ExecuteCombo();
+            HandleComboPlay();
         }
         else if (selectedComboCards.Count > 3)
         {
-            Debug.LogWarning("Can only combo up to 3 cards!");
             ResetComboSelection();
         }
         else if (!allSameType)
         {
-            Debug.LogWarning("All cards in combo must be of the same type!");
             ResetComboSelection();
         }
-    }
-
-    private void ExecuteCombo()
-    {
-        Debug.Log($"Thực hiện combo {selectedComboCards.Count} thẻ {selectedComboCards[0].data.effect}");
-        
-        // Gửi combo đến CardEffectManager
-        if (CardEffectManager.Instance != null)
-        {
-            CardEffectManager.Instance.HandleNormalCardCombo(new List<Card>(selectedComboCards));
-        }
-        
-        // Xóa thẻ khỏi tay người chơi và thêm vào PlayZone
-        foreach (Card card in selectedComboCards)
-        {
-            PlaySingleCard(card);
-        }
-        
-        // Reset combo selection
-        ResetComboSelection();
     }
     
     private void ResetComboSelection()
     {
-        Debug.Log($"ResetComboSelection: Resetting combo with {selectedComboCards.Count} cards");
-        
         foreach (Card card in selectedComboCards)
         {
             if (card != null)
@@ -452,7 +367,6 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                 card.selected = false;
                 // Reset visual position
                 card.transform.localPosition = Vector3.zero;
-                Debug.Log($"Reset selection for card {card.data.effect}");
             }
         }
         selectedComboCards.Clear();
@@ -462,8 +376,6 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
         {
             CardEffectManager.Instance.ShowComboSelectionStatus(0, "");
         }
-        
-        Debug.Log("ResetComboSelection: Complete");
     }
     
     private void PlaySingleCard(Card card)
@@ -531,8 +443,11 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
     private IEnumerator ShowCardEffectAnimation(string effectType)
     {
         Debug.Log($"PlayCardZone.ShowCardEffectAnimation: Starting animation for {effectType}");
+        
+        // Wait for animation to complete
         yield return new WaitForSeconds(1f);
-        Debug.Log($"PlayCardZone.ShowCardEffectAnimation: Animation completed for {effectType}, UI should be fully interactive");
+        
+        Debug.Log($"PlayCardZone.ShowCardEffectAnimation: Animation completed for {effectType}. UI restoration is handled by CardEffectManager.");
     }
 
     public void ClearPlayZone()
@@ -586,8 +501,6 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
     // Public method để force cleanup từ bên ngoài
     public void ForceCleanupSelection()
     {
-        Debug.Log("ForceCleanupSelection called - performing aggressive cleanup");
-        
         // Cleanup null references
         CleanupNullReferences();
         
@@ -600,7 +513,6 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
             Card card = selectedComboCards[i];
             if (card == null || !card.selected)
             {
-                Debug.Log($"ForceCleanupSelection: Force removing card at index {i}");
                 selectedComboCards.RemoveAt(i);
             }
         }
@@ -617,19 +529,19 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                 CardEffectManager.Instance.ShowComboSelectionStatus(0, "");
             }
         }
-        
-        Debug.Log($"ForceCleanupSelection: Cleanup complete, {selectedComboCards.Count} cards remaining in combo");
     }
 
     private void Update()
     {
-        // Clean up null references periodically
-        CleanupNullReferences();
+        // Clean up null references periodically (less frequent)
+        if (Time.frameCount % 60 == 0) // Only every 60 frames
+        {
+            CleanupNullReferences();
+        }
         
         // Right-click để hủy combo selection
         if (Input.GetMouseButtonDown(1) && selectedComboCards.Count > 0)
         {
-            Debug.Log("Canceling combo selection");
             ResetComboSelection();
         }
     }
@@ -752,41 +664,14 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
     {
         if (selectedComboCards.Count == 0) 
         {
-            Debug.Log("CanAddToCombo: No existing combo, can start new one");
             return true; // No combo yet
         }
         
-        // Check same card type
-        string comboType = selectedComboCards[0].data.effect;
-        if (card.data.effect != comboType) 
-        {
-            Debug.LogWarning($"CanAddToCombo: Card type mismatch! Combo: {comboType}, New card: {card.data.effect}");
-            return false;
-        }
-        
-        // Check max combo size
-        if (selectedComboCards.Count >= 3) 
-        {
-            Debug.LogWarning($"CanAddToCombo: Combo already full ({selectedComboCards.Count} cards)");
-            return false;
-        }
-        
-        // Check not already in combo
-        if (selectedComboCards.Contains(card)) 
-        {
-            Debug.LogWarning("CanAddToCombo: Card already in combo");
-            return false;
-        }
-        
-        // Check if it's a normal card
-        if (!IsNormalCard(card.data.effect))
-        {
-            Debug.LogWarning($"CanAddToCombo: {card.data.effect} is not a normal card");
-            return false;
-        }
-        
-        Debug.Log($"CanAddToCombo: OK - Can add {card.data.effect} to combo of {comboType}");
-        return true;
+        // Check same card type, max combo size, not already in combo, and is normal card
+        return card.data.effect == selectedComboCards[0].data.effect && 
+               selectedComboCards.Count < 3 && 
+               !selectedComboCards.Contains(card) &&
+               IsNormalCard(card.data.effect);
     }
 
     // Method để check xem có phải action card không
@@ -795,49 +680,10 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
         return cardType == "Favor" || cardType == "Nope" || cardType == "Shuffle" || 
                cardType == "Skip" || cardType == "SeeTheFuture" || cardType == "Attack";
     }
-    
-    // Debug method để hiển thị trạng thái combo hiện tại
-    private void DebugComboState()
-    {
-        if (selectedComboCards.Count == 0)
-        {
-            Debug.Log("DEBUG: No combo selected");
-            return;
-        }
-        
-        string cardList = "";
-        for (int i = 0; i < selectedComboCards.Count; i++)
-        {
-            Card card = selectedComboCards[i];
-            if (card != null)
-            {
-                cardList += $"[{i}] {card.data.effect} (selected={card.selected})";
-            }
-            else
-            {
-                cardList += $"[{i}] NULL";
-            }
-            if (i < selectedComboCards.Count - 1) cardList += ", ";
-        }
-        
-        Debug.Log($"DEBUG: Current combo state - {selectedComboCards.Count} cards: {cardList}");
-        
-        // Also debug all selected cards in hand
-        if (CardManager.Instance?.cardHolder?.Cards != null)
-        {
-            var selectedInHand = CardManager.Instance.cardHolder.Cards.FindAll(c => c != null && c.selected);
-            Debug.Log($"DEBUG: Cards selected in hand: {selectedInHand.Count}");
-            for (int i = 0; i < selectedInHand.Count; i++)
-            {
-                Debug.Log($"  Hand selected [{i}]: {selectedInHand[i].data.effect}");
-            }
-        }
-    }
 
     // Method để lấy tất cả cards đã selected (từ selectedComboCards + clicked cards)
     private List<Card> GetAllSelectedCards()
     {
-        Debug.Log("GetAllSelectedCards: Starting to gather selected cards");
         List<Card> allSelected = new List<Card>();
         
         // Cleanup null references và deselected cards trước tiên
@@ -851,7 +697,6 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                 if (card != null && card.selected && !allSelected.Contains(card))
                 {
                     allSelected.Add(card);
-                    Debug.Log($"GetAllSelectedCards: Found selected card {card.data.effect}");
                 }
             }
         }
@@ -862,13 +707,11 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
             Card card = selectedComboCards[i];
             if (card == null || !card.selected)
             {
-                Debug.Log($"GetAllSelectedCards: Removing invalid card from selectedComboCards at index {i}");
                 selectedComboCards.RemoveAt(i);
             }
             else if (!allSelected.Contains(card))
             {
                 allSelected.Add(card);
-                Debug.Log($"GetAllSelectedCards: Added combo card {card.data.effect} to all selected");
             }
         }
         
@@ -882,51 +725,18 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
             }
         }
         
-        Debug.Log($"GetAllSelectedCards: Final result - {allSelected.Count} selected cards total, {selectedComboCards.Count} in combo");
         return allSelected;
     }
 
     // Method để cleanup các cards đã bị deselect
     private void CleanupDeselectedCards()
     {
-        Debug.Log($"CleanupDeselectedCards: Starting cleanup, current combo has {selectedComboCards.Count} cards");
-        
-        // In ra trạng thái trước khi cleanup
-        for (int i = 0; i < selectedComboCards.Count; i++)
-        {
-            Card card = selectedComboCards[i];
-            if (card != null)
-            {
-                Debug.Log($"  Card {i}: {card.data.effect}, selected={card.selected}");
-            }
-            else
-            {
-                Debug.Log($"  Card {i}: NULL");
-            }
-        }
-        
         // Loại bỏ cards không còn selected hoặc null khỏi selectedComboCards
         int originalCount = selectedComboCards.Count;
-        selectedComboCards.RemoveAll(card => {
-            if (card == null)
-            {
-                Debug.Log("  Removing NULL card from combo");
-                return true;
-            }
-            if (!card.selected)
-            {
-                Debug.Log($"  Removing DESELECTED card {card.data.effect} from combo");
-                return true;
-            }
-            return false;
-        });
+        selectedComboCards.RemoveAll(card => card == null || !card.selected);
         
-        int removedCount = originalCount - selectedComboCards.Count;
-        
-        if (removedCount > 0)
+        if (originalCount != selectedComboCards.Count)
         {
-            Debug.Log($"CleanupDeselectedCards: Removed {removedCount} cards, {selectedComboCards.Count} cards remaining");
-            
             // Update effect status display
             if (CardEffectManager.Instance != null)
             {
@@ -939,12 +749,6 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                     CardEffectManager.Instance.ShowComboSelectionStatus(0, "");
                 }
             }
-            
-            DebugComboState();
-        }
-        else
-        {
-            Debug.Log("CleanupDeselectedCards: No cards to remove");
         }
     }
 }

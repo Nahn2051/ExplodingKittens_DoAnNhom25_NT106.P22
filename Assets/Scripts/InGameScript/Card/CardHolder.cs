@@ -42,11 +42,6 @@ public class CardHolder : MonoBehaviour
             return;
         }
         
-        if (Cards.Count <= 6 && Cards.Count != 0)
-        {
-            Rect.sizeDelta = new Vector2(Rect.sizeDelta.x + 204, Rect.sizeDelta.y);
-        }
-        
         GameObject cardSlotObj = Instantiate(cardPrefab, transform);
         Card cardComponent = cardSlotObj.GetComponentInChildren<Card>();
         if (cardComponent == null)
@@ -66,9 +61,26 @@ public class CardHolder : MonoBehaviour
         
         Debug.Log($"Added card '{data.cardName}' to player's hand. Current card count: {Cards.Count}");
         
-        ArrangeCards();
+        // Update size and arrange cards in one operation
+        UpdateHolderSizeAndArrange();
     }
     
+    private void UpdateHolderSizeAndArrange()
+    {
+        // Update holder size based on card count
+        if (Cards.Count <= 6 && Cards.Count > 0)
+        {
+            // Only update if needed to avoid redundant operations
+            float expectedWidth = 204 * Cards.Count;
+            if (Mathf.Abs(Rect.sizeDelta.x - expectedWidth) > 1f)
+            {
+                Rect.sizeDelta = new Vector2(expectedWidth, Rect.sizeDelta.y);
+            }
+        }
+        
+        ArrangeCards();
+    }
+
     public void ArrangeCards()
     {
         // Clean up null references first
@@ -97,6 +109,20 @@ public class CardHolder : MonoBehaviour
         card.BeginDragEvent.AddListener(BeginDrag);
         card.EndDragEvent.AddListener(EndDrag);
     }
+    
+    // Method to enable or disable card interactions
+    public void EnableCardInteraction(bool enable)
+    {
+        foreach (Card card in Cards)
+        {
+            if (card != null)
+            {
+                card.SetInteractable(enable);
+            }
+        }
+        Debug.Log($"Card interactions set to {enable} for {Cards.Count} cards");
+    }
+    
     public void RemoveCard(Card card)
     {
         if (card == null || !Cards.Contains(card)) return;
@@ -115,15 +141,10 @@ public class CardHolder : MonoBehaviour
             Destroy(card.transform.parent.gameObject);
         }
         
-        if (Cards.Count <= 6 && Cards.Count != 0)
-        {
-            Rect.sizeDelta = new Vector2(Rect.sizeDelta.x - 204, Rect.sizeDelta.y);
-        }
-        
-        // Rearrange remaining cards
-        ArrangeCards();
-        
         Debug.Log($"Removed card. Remaining cards: {Cards.Count}");
+        
+        // Update size and rearrange in one operation
+        UpdateHolderSizeAndArrange();
     }
     private void BeginDrag(Card card)
     {
@@ -138,11 +159,7 @@ public class CardHolder : MonoBehaviour
 
         selectedCard.transform.DOLocalMove(selectedCard.selected ? new Vector3(0, selectedCard.selectionOffset, 0) : Vector3.zero, tweenCardReturn ? .15f : 0).SetEase(Ease.OutBack);
 
-        Rect.sizeDelta += Vector2.right;
-        Rect.sizeDelta -= Vector2.right;
-
         selectedCard = null;
-
     }
 
     void CardPointerEnter(Card card)
@@ -256,14 +273,13 @@ public class CardHolder : MonoBehaviour
     
     public void RemoveCardByName(string cardName)
     {
-        Card cardToRemove = Cards.FirstOrDefault(c => c.data.cardName == cardName);
+        Card cardToRemove = Cards.FirstOrDefault(c => c != null && c.data.cardName == cardName);
         if (cardToRemove != null)
         {
-            Cards.Remove(cardToRemove);
-            Destroy(cardToRemove.transform.parent.gameObject);
+            RemoveCard(cardToRemove); // Use existing RemoveCard method to avoid duplication
             Debug.Log("Đã xoá lá bài: " + cardName);
-
-            ArrangeCards();
+            
+            // UpdatePlayerCardCount is already called in UpdateHolderSizeAndArrange
             GameManager.Instance?.UpdatePlayerCardCount();
         }
         else
@@ -274,28 +290,8 @@ public class CardHolder : MonoBehaviour
     
     public void AddCard(GameObject cardPrefab, CardData data)
     {
-        GameObject cardObj = Instantiate(cardPrefab);
-        cardObj.transform.SetParent(transform, false);
-
-        Card cardComp = cardObj.GetComponentInChildren<Card>();
-
-        if (cardComp != null)
-        {
-            cardComp.Setup(data);
-            Cards.Add(cardComp);
-
-            cardObj.transform.localPosition = Vector3.zero;
-            cardObj.transform.localScale = Vector3.one;
-
-            RegisterCardEvents(cardComp);
-            ArrangeCards();
-            GameManager.Instance?.UpdatePlayerCardCount();
-
-            Debug.Log("Đã thêm lá bài: " + data.cardName);
-        }
-        else
-        {
-            Debug.LogError("Không tìm thấy component Card trong prefab!");
-        }
+        // Use existing DrawCard method to avoid code duplication
+        DrawCard(cardPrefab, data);
+        Debug.Log("Đã thêm lá bài: " + data.cardName);
     }
 }
