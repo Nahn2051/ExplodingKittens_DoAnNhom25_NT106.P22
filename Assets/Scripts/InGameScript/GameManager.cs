@@ -55,6 +55,12 @@ public class GameManager : MonoBehaviourPunCallbacks
     private void Start()
     {
         InitializeGame();
+        Vector3 spawnPos = new Vector3(UnityEngine.Random.Range(-2f, 2f), 0, UnityEngine.Random.Range(-2f, 2f));
+        PhotonNetwork.Instantiate("VoicePlayer", spawnPos, Quaternion.identity);
+        //yield return new WaitUntil(() => PhotonNetwork.InRoom);
+
+        // Giờ mới gọi Instantiate
+        PhotonNetwork.Instantiate("VoicePlayer", Vector3.zero, Quaternion.identity);
     }
     
     public int GetCurrentTurnIndex()
