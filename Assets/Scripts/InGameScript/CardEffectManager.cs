@@ -10,7 +10,7 @@ using System.Linq;
 public class CardEffectManager : MonoBehaviourPunCallbacks
 {
     public static CardEffectManager Instance;
-    [SerializeField] private TMP_Text CurrentEffectText;
+    // [SerializeField] private TMP_Text CurrentEffectText;
     
     [Header("UI Components")]
     [SerializeField] private ExplodingKittenUI explodingKittenUI;
@@ -22,22 +22,9 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     [HideInInspector] public static bool IsExplodingInProgress = false;
     [HideInInspector] public static int ExplodingPlayerId = -1;
     
-    // Biến để quản lý hiển thị effect
-    private Coroutine currentEffectCoroutine;
-    
-    // Màu sắc cho từng loại effect
-    private Dictionary<string, Color> effectColors = new Dictionary<string, Color>
-    {
-        {"Exploding", Color.red},           // Đỏ cho Exploding
-        {"Defuse", Color.green},            // Xanh lá cho Defuse  
-        {"Attack", new Color(1f, 0.5f, 0f)},          // Cam cho Attack
-        {"Skip", Color.cyan},               // Xanh dương cho Skip
-        {"Favor", Color.yellow},            // Vàng cho Favor
-        {"Shuffle", Color.blue},            // Xanh đậm cho Shuffle
-        {"SeeTheFuture", Color.magenta}, // Cam cho SeeTheFuture
-        {"Combo2", new Color(0.5f, 0f, 1f)}, // Tím nhạt cho Combo 2
-        {"Combo3", new Color(1f, 0f, 0.5f)}  // Hồng cho Combo 3
-    };
+    // Track backup elimination coroutines so we can cancel them
+    private Coroutine backupEliminationCoroutine = null;
+    private Coroutine finalSafetyEliminationCoroutine = null;
     
     private void Awake()
     {
@@ -78,12 +65,13 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         if (normalCardComboUI != null && comboCards.Count >= 2)
         {
-            // Hiển thị combo effect với countdown
-            string comboType = comboCards.Count == 2 ? "Combo2" : "Combo3";
-            ShowCountdownEffect(comboType, 3);
-            
             // Thực hiện combo ngay lập tức
             normalCardComboUI.HandleNormalCardCombo(comboCards);
+            
+            // Log để debug
+            string comboType = comboCards.Count == 2 ? "Combo2" : "Combo3";
+            
+            Debug.Log($"CardEffectManager: Triggered {comboType} UI for {comboCards.Count} cards of type {comboCards[0].data.effect}");
         }
     }
     
@@ -121,6 +109,9 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     private void OnDefuseConfirmed(int position)
     {
         Debug.Log($"OnDefuseConfirmed called with position {position}");
+        
+        // Cancel any active backup elimination timers immediately
+        CancelBackupEliminationTimers();
         
         // Gửi RPC để đặt lại exploding card vào deck
         // RPC_ReinsertExplodingCard sẽ gọi RPC_EndExplodingState để reset trạng thái cho tất cả client
@@ -246,6 +237,10 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
                 CardManager.Instance.cardHolder.RemoveCard(randomCard);
             }
         }
+        
+        // Ensure UI interactions are restored after combo execution
+        StartCoroutine(RestoreUIAfterEffect("TwoCardCombo"));
+        Debug.Log("Two-card combo completed, UI restoration started");
     }
     
     [PunRPC]
@@ -293,6 +288,10 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
                 photonView.RPC("RPC_ComboCardNotFound", RpcTarget.All, requestedCardType, fromPlayerId, toPlayerId);
             }
         }
+        
+        // Ensure UI interactions are restored after combo execution
+        StartCoroutine(RestoreUIAfterEffect("ThreeCardCombo"));
+        Debug.Log("Three-card combo completed, UI restoration started");
     }
     
     [PunRPC]
@@ -318,6 +317,10 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     private void RPC_ComboCardNotFound(string requestedCardType, int fromPlayerId, int toPlayerId)
     {
         Debug.Log($"Người chơi {toPlayerId} không có lá {requestedCardType} mà người chơi {fromPlayerId} yêu cầu");
+        
+        // Ensure UI interactions are restored even when card is not found
+        StartCoroutine(RestoreUIAfterEffect("ThreeCardComboNotFound"));
+        Debug.Log("Three-card combo card not found, UI restoration started");
     }
     
     // Xử lý kích hoạt hiệu ứng thẻ bài
@@ -373,6 +376,13 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             case "RainbowRalphingCat":
                 // Normal cards sẽ được xử lý bởi combo system
                 Debug.Log($"Normal card {effectType} được chơi bởi người chơi {activatingPlayerId}");
+                
+                // Ensure UI interactions are restored after normal card is played individually
+                if (GameManager.Instance != null)
+                {
+                    StartCoroutine(RestoreUIAfterEffect(effectType));
+                    Debug.Log($"Normal card {effectType} played individually, UI restoration started");
+                }
                 break;
                 
             default:
@@ -386,9 +396,6 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"HandleExplodingEffect called for player {playerId}");
         Debug.Log($"Local player ActorNumber: {PhotonNetwork.LocalPlayer.ActorNumber}");
-        
-        // Hiển thị effect Exploding ngay lập tức
-        ShowInstantEffect("Exploding");
         
         // Đặt trạng thái exploding đang diễn ra cho toàn bộ game
         SetExplodingState(true, playerId);
@@ -409,6 +416,18 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("Starting exploding kitten sequence!");
         
+        // Cancel any existing backup timers first
+        if (backupEliminationCoroutine != null)
+        {
+            StopCoroutine(backupEliminationCoroutine);
+            backupEliminationCoroutine = null;
+        }
+        if (finalSafetyEliminationCoroutine != null)
+        {
+            StopCoroutine(finalSafetyEliminationCoroutine);
+            finalSafetyEliminationCoroutine = null;
+        }
+        
         // Thông báo GameManager rằng exploding đang diễn ra
         if (GameManager.Instance != null)
         {
@@ -419,6 +438,72 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         if (explodingKittenUI != null)
         {
             explodingKittenUI.StartExplodingKittenSequence();
+        }
+        
+        // Start backup elimination timers and track them
+        backupEliminationCoroutine = StartCoroutine(BackupEliminationTimer(11f)); // 11 seconds - 1 second more than the UI countdown
+        finalSafetyEliminationCoroutine = StartCoroutine(FinalSafetyEliminationTimer(15f)); // 15 seconds - absolute maximum
+    }
+    
+    private IEnumerator BackupEliminationTimer(float timeLimit)
+    {
+        yield return new WaitForSeconds(timeLimit);
+        
+        // If we're still in exploding state after time limit, force eliminate the player
+        if (IsExplodingInProgress)
+        {
+            Debug.LogWarning($"BACKUP ELIMINATION: Player took more than {timeLimit} seconds to defuse - triggering elimination");
+            
+            // Force elimination through UI first
+            if (explodingKittenUI != null)
+            {
+                explodingKittenUI.ForcePlayerElimination();
+            }
+            
+            // Wait a moment for UI elimination to process
+            yield return new WaitForSeconds(1f);
+            
+            // If still in exploding state, force direct elimination
+            if (IsExplodingInProgress)
+            {
+                Debug.LogError("UI elimination failed, forcing direct elimination");
+                OnPlayerEliminated();
+            }
+        }
+    }
+    
+    private IEnumerator FinalSafetyEliminationTimer(float timeLimit)
+    {
+        yield return new WaitForSeconds(timeLimit);
+        
+        // If we're still in exploding state after absolute time limit, force eliminate immediately
+        if (IsExplodingInProgress)
+        {
+            Debug.LogError($"FINAL SAFETY ELIMINATION: Player took more than {timeLimit} seconds to defuse - forcing elimination immediately!");
+            
+            // Reset exploding state first
+            SetExplodingState(false);
+            
+            // Force eliminate the player who was supposed to be exploding
+            int playerToEliminate = PhotonNetwork.LocalPlayer.ActorNumber;
+            
+            // Send elimination RPC directly
+            if (PhotonNetwork.IsMasterClient)
+            {
+                photonView.RPC("RPC_PlayerEliminated", RpcTarget.All, playerToEliminate);
+            }
+            else
+            {
+                // If not master client, trigger local elimination
+                OnPlayerEliminated();
+            }
+            
+            // Hide all exploding UI
+            if (explodingKittenUI != null)
+            {
+                explodingKittenUI.HideExplodingPanel();
+                explodingKittenUI.HidePositionInputPanel();
+            }
         }
     }
     
@@ -463,9 +548,6 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"Xử lý hiệu ứng Defuse từ người chơi {playerId}");
         
-        // Hiển thị effect Defuse ngay lập tức
-        ShowInstantEffect("Defuse");
-        
         // Defuse là thẻ gỡ bom đặc biệt
         // Chỉ được sử dụng khi rút phải Exploding Kitten
         Debug.Log("Defuse cards cannot be played directly - only used to defuse Exploding Kittens");
@@ -475,33 +557,50 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"Xử lý hiệu ứng Attack từ người chơi {playerId}");
         
-        // Hiển thị effect Attack với countdown
-        ShowCountdownEffect("Attack", 2);
-        
         // Thực hiện hiệu ứng ngay
-        if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
+        if (PhotonNetwork.LocalPlayer.ActorNumber == playerId && GameManager.Instance != null)
         {
             GameManager.Instance.ProcessAttackPlayed();
+            
+            // Ghi log để debug
+            Debug.Log("Attack card effect processed, turn should change");
         }
+        
+        // Ensure UI interactions are restored after Attack effect
+        StartCoroutine(RestoreUIAfterEffect("Attack"));
     }
     
     private void HandleFavorEffect(int playerId)
     {
         Debug.Log($"[Favor] Xử lý hiệu ứng Favor từ player {playerId}");
         
-        // Hiển thị effect Favor với countdown
-        ShowCountdownEffect("Favor", 2);
-        
         // Thực hiện hiệu ứng ngay
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId && FavorTargetSelectUI.Instance != null)
         {
+            // Ensure the panel is visible and on top
+            FavorTargetSelectUI.Instance.gameObject.SetActive(true);
+            FavorTargetSelectUI.Instance.transform.SetAsLastSibling();
+            
+            Debug.Log("[Favor] Showing target selection UI");
+            
+            // Ensure UI interactions are enabled before showing the panel
+            if (GameManager.Instance != null)
+            {
+                // Use the new method that doesn't close active dialogs
+                GameManager.Instance.EnableUIInteractionsOnly();
+                Debug.Log("[Favor] UI interactions enabled, Favor panel should be interactive");
+            }
+            
             FavorTargetSelectUI.Instance.Show(
                 GameManager.Instance.playerList,
                 PhotonNetwork.LocalPlayer.ActorNumber,
                 (targetPlayerId) =>
                 {
-                    Debug.Log("[Favor] Đã chọn người chơi có ID: " + targetPlayerId);
+                    Debug.Log("[Favor] Đã chọn người chọi có ID: " + targetPlayerId);
                     photonView.RPC("RPC_RequestFavorCard", RpcTarget.All, playerId, targetPlayerId);
+                    
+                    // Start UI restoration after favor is initiated
+                    StartCoroutine(RestoreUIAfterEffect("Favor"));
                 }
             );
         }
@@ -513,14 +612,14 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"Xử lý hiệu ứng Shuffle từ người chơi {playerId}");
         
-        // Hiển thị effect Shuffle với countdown
-        ShowCountdownEffect("Shuffle", 2);
-        
         // Thực hiện hiệu ứng ngay
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
             CardManager.Instance.PhotonView.RPC("RPC_RequestShuffle", RpcTarget.MasterClient);
         }
+        
+        // Ensure UI interactions are restored after Shuffle effect
+        StartCoroutine(RestoreUIAfterEffect("Shuffle"));
     }
     
     private void HandleSkipEffect(int playerId)
@@ -528,20 +627,109 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         Debug.Log($"Xử lý hiệu ứng Skip từ người chơi {playerId}");
         
         // Check if player is still in the game before proceeding
-        if (GameManager.Instance.IsPlayerEliminated(playerId))
+        if (GameManager.Instance != null && GameManager.Instance.IsPlayerEliminated(playerId))
         {
             Debug.LogError($"Player {playerId} is already eliminated! Cannot process Skip card.");
             return;
         }
         
-        // Hiển thị effect Skip với countdown
-        ShowCountdownEffect("Skip", 2);
-        
         // Thực hiện hiệu ứng ngay
-        if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
+        if (PhotonNetwork.LocalPlayer.ActorNumber == playerId && GameManager.Instance != null)
         {
             GameManager.Instance.ProcessSkipPlayed();
+            
+            // Ghi log để debug
+            Debug.Log("Skip card effect processed, turn should change");
         }
+        
+        // Ensure UI interactions are restored after Skip effect with multiple attempts
+        StartCoroutine(RestoreUIAfterSkip());
+    }
+    
+    private IEnumerator RestoreUIAfterSkip()
+    {
+        Debug.Log("[Skip] Starting aggressive UI restoration sequence");
+        
+        // Immediate restoration - First attempt
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.EnablePlayerInteractions();
+            GameManager.Instance.ForceEnableAllUIInteractions();
+            Debug.Log("[Skip] UI interactions restored (immediate)");
+        }
+        
+        // Second attempt after short delay
+        yield return new WaitForSeconds(0.1f);
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ForceEnableAllUIInteractions();
+            Debug.Log("[Skip] UI interactions restored (0.1s delay)");
+        }
+        
+        // Third attempt after longer delay
+        yield return new WaitForSeconds(0.3f);
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.EnablePlayerInteractions();
+            GameManager.Instance.ForceEnableAllUIInteractions();
+            Debug.Log("[Skip] UI interactions restored (0.3s delay)");
+        }
+        
+        // Final attempt - very aggressive restoration
+        yield return new WaitForSeconds(0.5f);
+        if (GameManager.Instance != null)
+        {
+            // Force enable all canvases and buttons
+            Canvas[] allCanvases = FindObjectsOfType<Canvas>();
+            foreach (Canvas canvas in allCanvases)
+            {
+                canvas.enabled = true;
+                GraphicRaycaster raycaster = canvas.GetComponent<GraphicRaycaster>();
+                if (raycaster != null) raycaster.enabled = true;
+            }
+            
+            Button[] allButtons = FindObjectsOfType<Button>();
+            foreach (Button button in allButtons)
+            {
+                button.interactable = true;
+            }
+            
+            // Re-enable card interactions specifically
+            if (CardHolder.Instance != null)
+            {
+                CardHolder.Instance.EnableCardInteraction(true);
+            }
+            
+            Debug.Log($"[Skip] Final aggressive restoration: {allCanvases.Length} canvases, {allButtons.Length} buttons enabled");
+        }
+    }
+    
+    private IEnumerator RestoreUIAfterEffect(string effectName)
+    {
+        Debug.Log($"[{effectName}] Starting UI restoration sequence");
+        
+        // Immediate restoration
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.EnablePlayerInteractions();
+            Debug.Log($"[{effectName}] UI interactions restored (immediate)");
+        }
+        
+        // Force restore card interactions
+        ForceRestoreCardInteractions();
+        
+        // Second attempt after short delay
+        yield return new WaitForSeconds(0.2f);
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ForceEnableAllUIInteractions();
+            Debug.Log($"[{effectName}] UI interactions restored (0.2s delay)");
+        }
+        
+        // Final attempt
+        yield return new WaitForSeconds(0.5f);
+        ForceRestoreCardInteractions();
+        Debug.Log($"[{effectName}] UI restoration completed");
     }
     
     [PunRPC]
@@ -606,114 +794,41 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     [PunRPC]
     public void RPC_ShowWinner(string winnerName)
     {
-        Debug.Log($"Winner announced: {winnerName}");
+        Debug.Log($"[RPC_ShowWinner] Winner announced: {winnerName}");
         
         if (gameSetUI != null)
         {
-            // Kiểm tra xem local player có phải là winner không
-            bool isLocalPlayerWinner = PhotonNetwork.LocalPlayer.NickName == winnerName;
+            // Kiểm tra xem local player có phải là winner không với nhiều cách so sánh
+            string localPlayerName = PhotonNetwork.LocalPlayer.NickName;
+            bool isLocalPlayerWinner = false;
+            
+            // So sánh tên chính xác
+            if (localPlayerName == winnerName)
+            {
+                isLocalPlayerWinner = true;
+            }
+            // So sánh case-insensitive để tránh lỗi do viết hoa/thường
+            else if (string.Equals(localPlayerName, winnerName, System.StringComparison.OrdinalIgnoreCase))
+            {
+                isLocalPlayerWinner = true;
+            }
+            
+            Debug.Log($"[RPC_ShowWinner] Local player: '{localPlayerName}', Winner: '{winnerName}', IsLocalWinner: {isLocalPlayerWinner}");
+            
+            // Hiển thị UI với thông tin chính xác
             gameSetUI.ShowGameOver(winnerName, isLocalPlayerWinner);
         }
-    }
-    
-    // Method để hiển thị effect ngay lập tức (không có countdown)
-    private void ShowInstantEffect(string effectName)
-    {
-        if (CurrentEffectText != null)
+        else
         {
-            // Dừng coroutine hiện tại nếu có
-            if (currentEffectCoroutine != null)
-            {
-                StopCoroutine(currentEffectCoroutine);
-            }
-            
-            CurrentEffectText.text = effectName;
-            
-            // Đặt màu cho effect
-            if (effectColors.ContainsKey(effectName))
-            {
-                CurrentEffectText.color = effectColors[effectName];
-            }
-            else
-            {
-                CurrentEffectText.color = Color.white; // Màu mặc định
-            }
-            
-            // Hiển thị trong 3 giây rồi ẩn
-            currentEffectCoroutine = StartCoroutine(HideEffectAfterDelay(3f));
-        }
-    }
-    
-    // Method để hiển thị effect với countdown
-    private void ShowCountdownEffect(string effectName, int countdown)
-    {
-        if (CurrentEffectText != null)
-        {
-            // Dừng coroutine hiện tại nếu có
-            if (currentEffectCoroutine != null)
-            {
-                StopCoroutine(currentEffectCoroutine);
-            }
-            
-            // Đặt màu cho effect
-            if (effectColors.ContainsKey(effectName))
-            {
-                CurrentEffectText.color = effectColors[effectName];
-            }
-            else
-            {
-                CurrentEffectText.color = Color.white; // Màu mặc định
-            }
-            
-            // Bắt đầu countdown
-            currentEffectCoroutine = StartCoroutine(CountdownEffect(effectName, countdown));
-        }
-    }
-    
-    // Coroutine để đếm ngược
-    private IEnumerator CountdownEffect(string effectName, int seconds)
-    {
-        for (int i = seconds; i > 0; i--)
-        {
-            if (CurrentEffectText != null)
-            {
-                CurrentEffectText.text = $"{effectName}: {i}s";
-            }
-            yield return new WaitForSeconds(1f);
-        }
-        
-        // Khi hết thời gian, chỉ hiển thị "Activated!" ngắn gọn
-        if (CurrentEffectText != null)
-        {
-            CurrentEffectText.text = $"{effectName} Activated!";
-            yield return new WaitForSeconds(0.5f); // Giảm từ 2s xuống 0.5s
-            CurrentEffectText.text = "";
-        }
-    }
-    
-    // Coroutine để ẩn effect sau một khoảng thời gian
-    private IEnumerator HideEffectAfterDelay(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        if (CurrentEffectText != null)
-        {
-            CurrentEffectText.text = "";
+            Debug.LogError("[RPC_ShowWinner] GameSetUI is null!");
         }
     }
     
     // Method để ẩn effect ngay lập tức
     public void HideEffect()
     {
-        if (currentEffectCoroutine != null)
-        {
-            StopCoroutine(currentEffectCoroutine);
-            currentEffectCoroutine = null;
-        }
-        
-        if (CurrentEffectText != null)
-        {
-            CurrentEffectText.text = "";
-        }
+        // Effect text has been removed, this method is kept for compatibility
+        Debug.Log("HideEffect called - effect text display has been removed");
     }
     
     // Event handlers cho UI components
@@ -726,33 +841,99 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         //Gọi UI để hiển thị các lá bài
         if (SeeTheFutureUI.Instance != null)
         {
+            // Register for the completion event
+            SeeTheFutureUI.Instance.OnSeeTheFutureComplete = () => {
+                Debug.Log("SeeTheFuture effect completed, enabling interaction");
+                
+                // Ensure UI interaction is restored
+                if (GameManager.Instance != null)
+                {
+                    GameManager.Instance.EnablePlayerInteractions();
+                }
+                
+                // Clear the reference to avoid memory leaks
+                SeeTheFutureUI.Instance.OnSeeTheFutureComplete = null;
+            };
+            
+            // Show the cards
             SeeTheFutureUI.Instance.ShowFutureCards(spriteIndexes);
         }
     }
     [PunRPC]
     private void RPC_RequestFavorCard(int fromPlayerId, int toPlayerId)
     {
+        Debug.Log($"[Favor] RPC_RequestFavorCard received - fromPlayer: {fromPlayerId}, toPlayer: {toPlayerId}, localPlayer: {PhotonNetwork.LocalPlayer.ActorNumber}");
+        
+        // Log all players to debug
+        foreach (var player in PhotonNetwork.PlayerList)
+        {
+            Debug.Log($"[Favor] Player in room: {player.NickName} (ID: {player.ActorNumber})");
+        }
+        
         if (PhotonNetwork.LocalPlayer.ActorNumber == toPlayerId)
         {
-            var cards = CardHolder.Instance.Cards.Select(c => c.data).ToList();
-
-            FavorGiveCardUI.Instance.Show(cards, (selectedCardName) =>
+            Debug.Log("[Favor] This local player is the target - showing card selection UI");
+            
+            // Check if CardHolder instance exists
+            if (CardHolder.Instance == null)
             {
-                CardData selectedCard = cards.FirstOrDefault(c => c.cardName == selectedCardName);
-                if (selectedCard == null)
+                Debug.LogError("[Favor] CardHolder.Instance is null!");
+                return;
+            }
+            
+            var cards = CardHolder.Instance.Cards.Select(c => c.data).ToList();
+            Debug.Log($"[Favor] Target player has {cards.Count} cards to choose from");
+            
+            if (cards.Count == 0)
+            {
+                Debug.LogWarning("[Favor] Target player has no cards to give!");
+                return;
+            }
+            
+            // Check if FavorGiveCardUI instance exists
+            if (FavorGiveCardUI.Instance == null)
+            {
+                Debug.LogError("[Favor] FavorGiveCardUI.Instance is null! Trying to find it manually...");
+                
+                // Try to find FavorGiveCardUI in the scene
+                FavorGiveCardUI foundUI = FindObjectOfType<FavorGiveCardUI>();
+                if (foundUI != null)
                 {
-                    Debug.LogError("❌ Không tìm thấy cardData với tên: " + selectedCardName);
+                    Debug.Log("[Favor] Found FavorGiveCardUI in scene, using it");
+                    FavorGiveCardUI.Instance = foundUI;
+                }
+                else
+                {
+                    Debug.LogError("[Favor] Could not find FavorGiveCardUI anywhere in the scene!");
                     return;
                 }
-
-                int spriteIndex = CardManager.Instance.GetSpriteIndex(selectedCard.sprite);
-                photonView.RPC("RPC_ReceiveFavorCardByData", RpcTarget.All,
-                    fromPlayerId,
-                    toPlayerId,
-                    selectedCard.cardName,
-                    spriteIndex,
-                    selectedCard.effect);
-            });
+            }
+            
+            // Force ensure the UI is properly set up
+            Canvas canvas = FavorGiveCardUI.Instance.GetComponent<Canvas>();
+            if (canvas != null)
+            {
+                canvas.enabled = true;
+                canvas.sortingOrder = 100; // Ensure it's on top
+            }
+            
+            // Make sure the FavorGiveCardUI is active and on top
+            FavorGiveCardUI.Instance.gameObject.SetActive(true);
+            FavorGiveCardUI.Instance.transform.SetAsLastSibling();
+            
+            Debug.Log("[Favor] Showing FavorGiveCardUI for target player");
+            
+            // Start coroutine to show UI with delay to ensure proper initialization
+            StartCoroutine(ShowFavorUIDelayed(cards, fromPlayerId, toPlayerId));
+        }
+        else
+        {
+            Debug.Log($"[Favor] This player ({PhotonNetwork.LocalPlayer.ActorNumber}) is not the target ({toPlayerId})");
+            // Even non-target players should prepare for potential UI updates
+            if (GameManager.Instance != null)
+            {
+                StartCoroutine(RestoreUIAfterEffect("FavorWait"));
+            }
         }
     }
     [PunRPC]
@@ -786,14 +967,14 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
                 Debug.Log($"🎁 Người chơi {fromPlayerId} đã nhận được lá {cardName}");
             }
         }
+        
+        // Ensure UI is restored after favor card exchange is complete
+        StartCoroutine(RestoreUIAfterEffect("FavorCardExchange"));
     }
 
     private void HandleSeeTheFutureEffect(int playerId) 
     { 
         Debug.Log("See the future effect handled");
-        
-        // Hiển thị effect SeeTheFuture với countdown
-        ShowCountdownEffect("SeeTheFuture", 2);
         
         // Thực hiện hiệu ứng ngay
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId && CardManager.Instance != null)
@@ -802,7 +983,26 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             CardManager.Instance.PhotonView.RPC("RPC_RequestSeeTheFuture", RpcTarget.MasterClient, playerId);
         }
         
+        // Add a fallback UI restoration in case SeeTheFuture UI doesn't appear
+        StartCoroutine(EnsureSeeTheFutureUIRestoration());
+        
         Debug.Log("SeeTheFuture effect setup completed");
+    }
+    
+    private IEnumerator EnsureSeeTheFutureUIRestoration()
+    {
+        // Wait a bit for SeeTheFuture UI to appear
+        yield return new WaitForSeconds(2f);
+        
+        // If SeeTheFuture UI is not active, restore interactions
+        if (SeeTheFutureUI.Instance == null || !SeeTheFutureUI.Instance.IsPanelActive())
+        {
+            if (GameManager.Instance != null)
+            {
+                Debug.Log("SeeTheFuture UI fallback: ensuring interactions are enabled");
+                GameManager.Instance.EnablePlayerInteractions();
+            }
+        }
     }
 
     // Phương thức trung tâm để thay đổi trạng thái exploding với debug logging
@@ -853,7 +1053,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         // Reset SeeTheFuture UI nếu có
         if (SeeTheFutureUI.Instance != null)
         {
-            SeeTheFutureUI.Instance.gameObject.SetActive(false);
+            SeeTheFutureUI.Instance.ForceClosePanel();
         }
         
         // Reset Favor UI nếu có
@@ -862,7 +1062,11 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             FavorTargetSelectUI.Instance.gameObject.SetActive(false);
         }
         
-
+        // Reset FavorGiveCard UI nếu có
+        if (FavorGiveCardUI.Instance != null)
+        {
+            FavorGiveCardUI.Instance.gameObject.SetActive(false);
+        }
         
         Debug.Log("ForceResetUIState completed");
     }
@@ -872,6 +1076,12 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("ResetAllUIState called from external component");
         ForceResetUIState();
+        
+        // Make sure player interactions are enabled
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.EnablePlayerInteractions();
+        }
     }
     
     // Hàm phụ trợ
@@ -889,6 +1099,138 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         {
             explodingKittenUI.HideExplodingPanel();
             explodingKittenUI.HidePositionInputPanel();
+        }
+    }
+
+    // Method to aggressively restore card interactions after any effect
+    public void ForceRestoreCardInteractions()
+    {
+        Debug.Log("[CardEffectManager] Force restoring card interactions");
+        
+        // Enable card holder interactions
+        if (CardHolder.Instance != null)
+        {
+            CardHolder.Instance.EnableCardInteraction(true);
+            Debug.Log("[CardEffectManager] Card holder interactions enabled");
+        }
+        
+        // Enable draw card button if it's the player's turn
+        if (GameManager.Instance != null)
+        {
+            bool isLocalTurn = GameManager.Instance.IsLocalPlayerTurn();
+            var drawButton = GameManager.Instance.drawCardButtonComponent;
+            
+            if (drawButton != null && isLocalTurn && !IsExplodingInProgress)
+            {
+                drawButton.interactable = true;
+                Debug.Log("[CardEffectManager] Draw button enabled");
+            }
+        }
+        
+        // Force enable all buttons
+        Button[] allButtons = FindObjectsOfType<Button>();
+        foreach (Button button in allButtons)
+        {
+            // Skip buttons that should remain disabled during exploding
+            if (IsExplodingInProgress && button.name.Contains("Draw"))
+                continue;
+                
+            button.interactable = true;
+        }
+        
+        Debug.Log($"[CardEffectManager] Force enabled {allButtons.Length} buttons");
+    }
+
+    // Method to cancel backup elimination timers when defuse is successful
+    private void CancelBackupEliminationTimers()
+    {
+        if (backupEliminationCoroutine != null)
+        {
+            StopCoroutine(backupEliminationCoroutine);
+            backupEliminationCoroutine = null;
+            Debug.Log("Backup elimination timer canceled - defuse successful");
+        }
+        if (finalSafetyEliminationCoroutine != null)
+        {
+            StopCoroutine(finalSafetyEliminationCoroutine);
+            finalSafetyEliminationCoroutine = null;
+            Debug.Log("Final safety elimination timer canceled - defuse successful");
+        }
+    }
+
+    private IEnumerator ShowFavorUIDelayed(List<CardData> cards, int fromPlayerId, int toPlayerId)
+    {
+        Debug.Log("[Favor] Starting delayed UI show sequence");
+        
+        // Wait a frame to ensure all objects are properly initialized
+        yield return null;
+        
+        // Force enable all UI interactions multiple times
+        for (int i = 0; i < 3; i++)
+        {
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.ForceEnableAllUIInteractions();
+            }
+            yield return new WaitForSeconds(0.1f);
+        }
+        
+        // Ensure FavorGiveCardUI is fully prepared
+        if (FavorGiveCardUI.Instance != null)
+        {
+            // Force disable then enable to refresh state
+            FavorGiveCardUI.Instance.gameObject.SetActive(false);
+            yield return null;
+            FavorGiveCardUI.Instance.gameObject.SetActive(true);
+            
+            // Set as last sibling to ensure it's on top
+            FavorGiveCardUI.Instance.transform.SetAsLastSibling();
+            
+            // Force canvas settings
+            Canvas canvas = FavorGiveCardUI.Instance.GetComponent<Canvas>();
+            if (canvas != null)
+            {
+                canvas.enabled = true;
+                canvas.overrideSorting = true;
+                canvas.sortingOrder = 200; // Very high priority
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            }
+            
+            GraphicRaycaster raycaster = FavorGiveCardUI.Instance.GetComponent<GraphicRaycaster>();
+            if (raycaster != null)
+            {
+                raycaster.enabled = true;
+            }
+            
+            Debug.Log("[Favor] FavorGiveCardUI prepared, now showing cards");
+            
+            // Show the UI
+            FavorGiveCardUI.Instance.Show(cards, (selectedCardName) =>
+            {
+                Debug.Log($"[Favor] Target player selected card: {selectedCardName}");
+                
+                CardData selectedCard = cards.FirstOrDefault(c => c.cardName == selectedCardName);
+                if (selectedCard == null)
+                {
+                    Debug.LogError("❌ Không tìm thấy cardData với tên: " + selectedCardName);
+                    return;
+                }
+
+                int spriteIndex = CardManager.Instance.GetSpriteIndex(selectedCard.sprite);
+                photonView.RPC("RPC_ReceiveFavorCardByData", RpcTarget.All,
+                    fromPlayerId,
+                    toPlayerId,
+                    selectedCard.cardName,
+                    spriteIndex,
+                    selectedCard.effect);
+                    
+                // Start UI restoration after card is given
+                StartCoroutine(RestoreUIAfterEffect("FavorGive"));
+            });
+        }
+        else
+        {
+            Debug.LogError("[Favor] FavorGiveCardUI.Instance is still null after delay!");
         }
     }
 }

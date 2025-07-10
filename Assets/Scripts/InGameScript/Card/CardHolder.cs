@@ -97,6 +97,20 @@ public class CardHolder : MonoBehaviour
         card.BeginDragEvent.AddListener(BeginDrag);
         card.EndDragEvent.AddListener(EndDrag);
     }
+    
+    // Method to enable or disable card interactions
+    public void EnableCardInteraction(bool enable)
+    {
+        foreach (Card card in Cards)
+        {
+            if (card != null)
+            {
+                card.SetInteractable(enable);
+            }
+        }
+        Debug.Log($"Card interactions set to {enable} for {Cards.Count} cards");
+    }
+    
     public void RemoveCard(Card card)
     {
         if (card == null || !Cards.Contains(card)) return;

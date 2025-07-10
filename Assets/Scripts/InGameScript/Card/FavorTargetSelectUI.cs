@@ -23,6 +23,17 @@ public class FavorTargetSelectUI : MonoBehaviour
         buttonPrefab = Resources.Load<GameObject>("Prefabs/SimplePlayerButton");
         if (buttonPrefab == null) Debug.LogError("❌ Không tìm thấy prefab SimplePlayerButton trong Resources/Prefabs/");
 
+        // Ensure this UI has proper components for interaction
+        if (GetComponent<Canvas>() == null)
+        {
+            Debug.LogWarning("FavorTargetSelectUI: No Canvas component found, UI interaction might not work properly");
+        }
+        
+        if (GetComponent<UnityEngine.UI.GraphicRaycaster>() == null)
+        {
+            Debug.LogWarning("FavorTargetSelectUI: No GraphicRaycaster component found, UI interaction might not work properly");
+        }
+
         gameObject.SetActive(false); // ẩn từ đầu
     }
 
@@ -30,6 +41,9 @@ public class FavorTargetSelectUI : MonoBehaviour
     {
         onTargetSelected = onSelected;
         gameObject.SetActive(true);
+        transform.SetAsLastSibling(); // Ensure panel is on top
+        
+        Debug.Log($"FavorTargetSelectUI: Showing panel for {players.Count} players");
 
         // Xoá cũ
         foreach (Transform child in contentParent)
@@ -43,11 +57,34 @@ public class FavorTargetSelectUI : MonoBehaviour
             var btnText = btnGO.GetComponentInChildren<TMP_Text>();
             if (btnText != null) btnText.text = player.NickName;
 
-            btnGO.GetComponent<Button>().onClick.AddListener(() =>
+            var button = btnGO.GetComponent<Button>();
+            if (button != null)
             {
-                onTargetSelected?.Invoke(player.ActorNumber);
-                gameObject.SetActive(false);
-            });
+                // Ensure button is interactable
+                button.interactable = true;
+                
+                button.onClick.AddListener(() =>
+                {
+                    Debug.Log($"FavorTargetSelectUI: Player {player.NickName} (ID: {player.ActorNumber}) selected");
+                    onTargetSelected?.Invoke(player.ActorNumber);
+                    gameObject.SetActive(false);
+                    
+                    Debug.Log($"FavorTargetSelectUI: Target {player.ActorNumber} selected, panel deactivated");
+                    
+                    // Ensure UI interactions are restored
+                    if (GameManager.Instance != null)
+                    {
+                        GameManager.Instance.EnablePlayerInteractions();
+                        Debug.Log("FavorTargetSelectUI: UI interactions restored after target selection");
+                    }
+                });
+            }
+            else
+            {
+                Debug.LogError("FavorTargetSelectUI: Button component not found on instantiated prefab");
+            }
         }
+        
+        Debug.Log("FavorTargetSelectUI: Target selection buttons created and should be clickable");
     }
 }

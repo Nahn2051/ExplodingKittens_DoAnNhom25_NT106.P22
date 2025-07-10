@@ -15,7 +15,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     [SerializeField] private GameObject playerSlotPrefab;
     [SerializeField] private Transform playerSlotsContainer;
     [SerializeField] private GameObject drawCardButton;
-    [SerializeField] private Button drawCardButtonComponent;
+    [SerializeField] public Button drawCardButtonComponent; // Made public for external access
     [SerializeField] private Color activePlayerColor = Color.green;
     [SerializeField] private Color inactivePlayerColor = Color.white;
     
@@ -30,7 +30,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     private List<int> eliminatedPlayerIds = new List<int>();
     
     [Header("Turn Management")]
-    private bool isExplodingInProgress = false;
+    public bool isExplodingInProgress = false; // Made public for external access
     
     [Header("Effect States")]
     private int attackTurns = 1; // Số lượt phải chơi, bình thường là 1, bị Attack sẽ là 2
@@ -681,5 +681,113 @@ public class GameManager : MonoBehaviourPunCallbacks
         {
             Debug.LogWarning($"ReturnTurnToPlayer: playerId {playerId} not found in playerList");
         }
+    }
+    
+    // Method to explicitly re-enable player interactions
+    // Can be called after UI effects that might block interaction
+    public void EnablePlayerInteractions()
+    {
+        Debug.Log("Explicitly enabling player interactions");
+        
+        // Re-enable drawing cards if it's the player's turn
+        bool isLocalTurn = IsLocalPlayerTurn();
+        if (drawCardButtonComponent != null)
+        {
+            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress;
+        }
+        
+        // If this is the local player's turn, make sure their cards are interactive
+        if (isLocalTurn && CardHolder.Instance != null)
+        {
+            CardHolder.Instance.EnableCardInteraction(true);
+        }
+        
+        // Ensure all UI blocking elements are properly cleaned up
+        if (SeeTheFutureUI.Instance != null && SeeTheFutureUI.Instance.IsPanelActive())
+        {
+            SeeTheFutureUI.Instance.ForceClosePanel();
+        }
+        
+        // Only close Favor UI panels if they're not actively being used
+        // Check if favor UI should remain open
+        bool shouldCloseFavorUI = true;
+        if (FavorTargetSelectUI.Instance != null && FavorTargetSelectUI.Instance.gameObject.activeInHierarchy)
+        {
+            // Don't close if the target selection is currently active
+            shouldCloseFavorUI = false;
+            Debug.Log("Favor target selection UI is active, keeping it open");
+        }
+        
+        if (shouldCloseFavorUI)
+        {
+            // Hide Favor UI panels
+            if (FavorTargetSelectUI.Instance != null)
+            {
+                FavorTargetSelectUI.Instance.gameObject.SetActive(false);
+            }
+            
+            if (FavorGiveCardUI.Instance != null)
+            {
+                FavorGiveCardUI.Instance.gameObject.SetActive(false);
+            }
+        }
+        
+        // Reset card effect UI
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideEffect();
+            CardEffectManager.Instance.HideAllComboPanels();
+            CardEffectManager.Instance.HideExplodingPanels();
+        }
+        
+        Debug.Log("All UI interactions should now be restored");
+    }
+
+    // Method to enable UI interactions without closing active dialogs
+    public void EnableUIInteractionsOnly()
+    {
+        Debug.Log("Enabling UI interactions only (keeping active dialogs open)");
+        
+        // Re-enable drawing cards if it's the player's turn
+        bool isLocalTurn = IsLocalPlayerTurn();
+        if (drawCardButtonComponent != null)
+        {
+            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress;
+        }
+        
+        // If this is the local player's turn, make sure their cards are interactive
+        if (isLocalTurn && CardHolder.Instance != null)
+        {
+            CardHolder.Instance.EnableCardInteraction(true);
+        }
+        
+        Debug.Log("UI interactions enabled without closing dialogs");
+    }
+    
+    // Method to force enable all UI interactions (for combo panels)
+    public void ForceEnableAllUIInteractions()
+    {
+        Debug.Log("Force enabling ALL UI interactions for combo panels");
+        
+        // Enable all canvas components
+        Canvas[] allCanvases = FindObjectsOfType<Canvas>();
+        foreach (Canvas canvas in allCanvases)
+        {
+            canvas.enabled = true;
+            GraphicRaycaster raycaster = canvas.GetComponent<GraphicRaycaster>();
+            if (raycaster != null)
+            {
+                raycaster.enabled = true;
+            }
+        }
+        
+        // Enable all buttons
+        Button[] allButtons = FindObjectsOfType<Button>();
+        foreach (Button button in allButtons)
+        {
+            button.interactable = true;
+        }
+        
+        Debug.Log($"Force enabled {allCanvases.Length} canvases and {allButtons.Length} buttons");
     }
 }

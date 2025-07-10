@@ -316,14 +316,21 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
             CardEffectManager.Instance.HandleNormalCardCombo(new List<Card>(selectedComboCards));
         }
         
-        // Play all combo cards through CardManager
-        List<Card> cardsToPlay = new List<Card>(selectedComboCards);
+        // Remove combo cards from hand through CardManager
+        List<Card> cardsToRemove = new List<Card>(selectedComboCards);
         ResetComboSelection(); // Reset first to prevent conflicts
         
-        foreach (Card card in cardsToPlay)
+        // Remove cards from hand without triggering individual effects
+        foreach (Card card in cardsToRemove)
         {
-            PlaySingleCard(card);
+            if (CardManager.Instance != null && CardManager.Instance.cardHolder != null)
+            {
+                Debug.Log($"Removing combo card {card.data.effect} from hand");
+                CardManager.Instance.cardHolder.RemoveCard(card);
+            }
         }
+        
+        Debug.Log("Combo execution completed - cards removed from hand, effect handled by combo UI");
     }
 
     private bool IsValidCombo(List<Card> cards)
@@ -500,7 +507,90 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
     private IEnumerator ShowCardEffectAnimation(string effectType)
     {
         Debug.Log($"PlayCardZone.ShowCardEffectAnimation: Starting animation for {effectType}");
+        
+        // Wait for animation to complete
         yield return new WaitForSeconds(1f);
+        
+        // For SeeTheFuture, add an extra check to ensure UI remains responsive
+        if (effectType == "SeeTheFuture")
+        {
+            // We'll wait a bit to see if SeeTheFutureUI appears
+            float maxWaitTime = 1.5f;
+            float elapsedTime = 0f;
+            
+            // Wait for SeeTheFutureUI to appear or timeout
+            while (elapsedTime < maxWaitTime)
+            {
+                // If the UI is active, we'll let it handle interactions on its own
+                if (SeeTheFutureUI.Instance != null && SeeTheFutureUI.Instance.IsPanelActive())
+                {
+                    break;
+                }
+                
+                elapsedTime += 0.1f;
+                yield return new WaitForSeconds(0.1f);
+            }
+            
+            // If SeeTheFutureUI didn't appear after waiting, ensure interactions are re-enabled
+            if (SeeTheFutureUI.Instance == null || !SeeTheFutureUI.Instance.IsPanelActive())
+            {
+                if (GameManager.Instance != null)
+                {
+                    Debug.Log("SeeTheFuture UI did not appear, ensuring interactions are enabled");
+                    GameManager.Instance.EnablePlayerInteractions();
+                }
+            }
+        }
+        // For Favor, check if the target selection UI is active
+        else if (effectType == "Favor")
+        {
+            // Don't enable interactions if Favor UI is active, let it handle itself
+            if (FavorTargetSelectUI.Instance != null && FavorTargetSelectUI.Instance.gameObject.activeInHierarchy)
+            {
+                Debug.Log("Favor target selection UI is active, letting it handle interactions");
+            }
+            else
+            {
+                // If Favor UI didn't appear, ensure interactions are re-enabled
+                if (GameManager.Instance != null)
+                {
+                    Debug.Log("Favor UI not active, ensuring interactions are enabled");
+                    GameManager.Instance.EnablePlayerInteractions();
+                }
+            }
+        }
+        // For Attack, Skip, and Shuffle effects, ensure interactions are always restored
+        else if (effectType == "Attack" || effectType == "Skip" || effectType == "Shuffle")
+        {
+            // These effects are handled immediately and should restore UI
+            if (GameManager.Instance != null)
+            {
+                Debug.Log($"{effectType} animation completed, ensuring interactions are enabled");
+                GameManager.Instance.EnablePlayerInteractions();
+            }
+        }
+        // For normal cards (combo cards), ensure interactions are always restored
+        else if (effectType == "HairyPotatoCat" || effectType == "BeardCat" || 
+                 effectType == "Cattermelon" || effectType == "Tacocat" || 
+                 effectType == "RainbowRalphingCat")
+        {
+            // Normal cards should restore UI interactions when played individually
+            if (GameManager.Instance != null)
+            {
+                Debug.Log($"Normal card {effectType} animation completed, ensuring interactions are enabled");
+                GameManager.Instance.EnablePlayerInteractions();
+            }
+        }
+        // For all other effects, ensure interactions are restored as a fallback
+        else
+        {
+            if (GameManager.Instance != null)
+            {
+                Debug.Log($"Unknown effect {effectType} animation completed, ensuring interactions are enabled");
+                GameManager.Instance.EnablePlayerInteractions();
+            }
+        }
+        
         Debug.Log($"PlayCardZone.ShowCardEffectAnimation: Animation completed for {effectType}, UI should be fully interactive");
     }
 

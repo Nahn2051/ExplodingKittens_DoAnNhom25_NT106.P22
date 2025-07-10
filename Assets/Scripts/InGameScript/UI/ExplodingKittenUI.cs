@@ -91,6 +91,13 @@ public class ExplodingKittenUI : MonoBehaviour
         
         while (timeRemaining > 0)
         {
+            // Check if defuse was used during countdown
+            if (hasDefuseInZone)
+            {
+                Debug.Log("Defuse detected during countdown, stopping timer");
+                yield break; // Exit countdown if defuse was used
+            }
+            
             if (countdownText != null)
                 countdownText.text = $"{timeRemaining:F1}s";
                 
@@ -102,10 +109,39 @@ public class ExplodingKittenUI : MonoBehaviour
         if (countdownText != null)
             countdownText.text = "0s";
             
+        Debug.Log($"[ExplodingKittenUI] Countdown finished. hasDefuseInZone: {hasDefuseInZone}");
+        
         // Kiểm tra có defuse không
         if (!hasDefuseInZone)
         {
             // Không có defuse -> player bị loại
+            Debug.Log("[ExplodingKittenUI] No defuse provided, eliminating player");
+            
+            // Hide the exploding panel first
+            if (explodingKittenPanel != null)
+                explodingKittenPanel.SetActive(false);
+            
+            // Trigger elimination
+            OnPlayerEliminated?.Invoke();
+            
+            // Start a backup elimination timer in case the primary elimination fails
+            StartCoroutine(BackupEliminationCheck());
+        }
+        else
+        {
+            Debug.Log("[ExplodingKittenUI] Defuse was provided, player survives");
+        }
+    }
+    
+    private IEnumerator BackupEliminationCheck()
+    {
+        // Wait 2 seconds to see if elimination was processed
+        yield return new WaitForSeconds(2f);
+        
+        // If we're still in exploding state, force elimination again
+        if (CardEffectManager.IsExplodingInProgress)
+        {
+            Debug.LogWarning("[ExplodingKittenUI] Backup elimination check: Still in exploding state, forcing elimination again");
             OnPlayerEliminated?.Invoke();
         }
     }
@@ -173,5 +209,25 @@ public class ExplodingKittenUI : MonoBehaviour
     {
         if (positionInputPanel != null)
             positionInputPanel.SetActive(false);
+    }
+    
+    // Force elimination method for when automatic elimination fails
+    public void ForcePlayerElimination()
+    {
+        Debug.Log("Force eliminating player due to exploding without defuse");
+        OnPlayerEliminated?.Invoke();
+    }
+    
+    // Method to check if countdown is running
+    public bool IsCountdownActive()
+    {
+        return countdownCoroutine != null;
+    }
+    
+    // Method to manually trigger elimination for testing
+    public void TestElimination()
+    {
+        Debug.Log("Test elimination triggered");
+        OnPlayerEliminated?.Invoke();
     }
 }

@@ -281,4 +281,23 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
         int total = transform.parent.parent.childCount - 1;
         return Mathf.InverseLerp(0, total, index);
     }
+    
+    // Method to enable or disable card interaction
+    public void SetInteractable(bool interactable)
+    {
+        // Enable/disable the Graphic Raycaster component to control interaction
+        GraphicRaycaster raycaster = GetComponentInParent<GraphicRaycaster>();
+        if (raycaster != null)
+        {
+            raycaster.enabled = interactable;
+        }
+        
+        // Visually indicate interaction state
+        if (imageComponent != null)
+        {
+            Color newColor = imageComponent.color;
+            newColor.a = interactable ? 1.0f : 0.7f;
+            imageComponent.color = newColor;
+        }
+    }
 }
