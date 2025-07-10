@@ -63,6 +63,18 @@ MonoBehaviour:
   - RPC_StartTurn
   - RPC_UpdateDeckCount
   - RPC_UpdatePlayerCardCount
+  - RPC_AnnounceWinner
+  - RPC_ComboCardNotFound
+  - RPC_EndExplodingState
+  - RPC_ExecuteThreeCardCombo
+  - RPC_ExecuteTwoCardCombo
+  - RPC_PlayerEliminated
+  - RPC_ReceiveCardFromCombo
+  - RPC_ReinsertExplodingCard
+  - RPC_RestartGame
+  - RPC_ReturnToMainMenu
+  - RPC_ShowNopeEffect
+  - RPC_ShowWinner
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 0

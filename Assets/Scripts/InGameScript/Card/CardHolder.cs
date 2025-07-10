@@ -51,7 +51,7 @@ public class CardHolder : MonoBehaviour
         Card cardComponent = cardSlotObj.GetComponentInChildren<Card>();
         if (cardComponent == null)
         {
-            Debug.LogError("Không tìm thấy component Card trong CardSlot prefab!");
+            Debug.LogError("Cannot find Card component in CardSlot prefab!");
             return;
         }
 
@@ -64,13 +64,16 @@ public class CardHolder : MonoBehaviour
         
         RegisterCardEvents(cardComponent);
         
-        Debug.Log($"Thêm thẻ bài '{data.cardName}' vào tay người chơi. Số thẻ hiện có: {Cards.Count}");
+        Debug.Log($"Added card '{data.cardName}' to player's hand. Current card count: {Cards.Count}");
         
         ArrangeCards();
     }
     
     public void ArrangeCards()
     {
+        // Clean up null references first
+        Cards.RemoveAll(card => card == null);
+        
         if (Cards.Count == 0) return;
         
         float spacing = 100f;
@@ -79,8 +82,11 @@ public class CardHolder : MonoBehaviour
         for (int i = 0; i < Cards.Count; i++)
         {
             Card card = Cards[i];
-            Vector3 position = new Vector3(i * spacing - offset, 0, 0);
-            card.transform.parent.localPosition = position;
+            if (card != null && card.transform != null && card.transform.parent != null)
+            {
+                Vector3 position = new Vector3(i * spacing - offset, 0, 0);
+                card.transform.parent.localPosition = position;
+            }
         }
     }
 
@@ -93,20 +99,31 @@ public class CardHolder : MonoBehaviour
     }
     public void RemoveCard(Card card)
     {
-        if (!Cards.Contains(card)) return;
+        if (card == null || !Cards.Contains(card)) return;
         
+        // Clean up references first
+        if (selectedCard == card)
+            selectedCard = null;
+        if (hoveredCard == card)
+            hoveredCard = null;
+            
         Cards.Remove(card);
-        Destroy(card.transform.parent.gameObject);
+        
+        // Safe destroy with null check
+        if (card.transform != null && card.transform.parent != null)
+        {
+            Destroy(card.transform.parent.gameObject);
+        }
         
         if (Cards.Count <= 6 && Cards.Count != 0)
         {
             Rect.sizeDelta = new Vector2(Rect.sizeDelta.x - 204, Rect.sizeDelta.y);
         }
         
-        // Sắp xếp lại các thẻ bài sau khi xóa
+        // Rearrange remaining cards
         ArrangeCards();
         
-        Debug.Log($"Đã xóa thẻ bài. Số thẻ còn lại: {Cards.Count}");
+        Debug.Log($"Removed card. Remaining cards: {Cards.Count}");
     }
     private void BeginDrag(Card card)
     {
@@ -142,9 +159,15 @@ public class CardHolder : MonoBehaviour
     {
         if (Input.GetMouseButtonDown(1))
         {
+            // Clean up null references first
+            Cards.RemoveAll(card => card == null);
+            
             foreach (Card card in Cards)
             {
-                card.Deselect();
+                if (card != null)
+                {
+                    card.Deselect();
+                }
             }
         }
 
@@ -154,8 +177,12 @@ public class CardHolder : MonoBehaviour
         if (isCrossing)
             return;
 
+        // Clean up null references before accessing
+        Cards.RemoveAll(card => card == null);
+
         for (int i = 0; i < Cards.Count; i++)
         {
+            if (Cards[i] == null) continue;
 
             if (selectedCard.transform.position.x > Cards[i].transform.position.x)
             {
@@ -179,6 +206,9 @@ public class CardHolder : MonoBehaviour
 
     void Swap(int index)
     {
+        if (index < 0 || index >= Cards.Count || Cards[index] == null || selectedCard == null)
+            return;
+            
         isCrossing = true;
 
         Transform focusedParent = selectedCard.transform.parent;
@@ -192,35 +222,62 @@ public class CardHolder : MonoBehaviour
     }
     public void ShuffleButton()
     {
+        // Clean up null references first
+        Cards.RemoveAll(card => card == null);
+        
         Cards = Cards.OrderBy(a => UnityEngine.Random.value).ToList();
         for (int i = 0; i < Cards.Count; i++)
         {
-            Cards[i].transform.parent.SetSiblingIndex(i);
+            if (Cards[i] != null && Cards[i].transform.parent != null)
+            {
+                Cards[i].transform.parent.SetSiblingIndex(i);
+            }
         }
     }
+
+    // Method để clean up null references trong danh sách Cards
+    public void CleanupNullReferences()
+    {
+        Cards.RemoveAll(card => card == null);
+        
+        // Also clear selected/hovered if they are null
+        if (selectedCard == null || selectedCard.Equals(null))
+            selectedCard = null;
+        if (hoveredCard == null || hoveredCard.Equals(null))
+            hoveredCard = null;
+    }
+    // Method để check card status an toàn
+    public bool ContainsCard(Card card)
+    {
+        if (card == null) return false;
+        CleanupNullReferences();
+        return Cards.Contains(card);
+    }
+    
     public void RemoveCardByName(string cardName)
     {
         Card cardToRemove = Cards.FirstOrDefault(c => c.data.cardName == cardName);
         if (cardToRemove != null)
         {
             Cards.Remove(cardToRemove);
-            Destroy(cardToRemove.transform.parent.gameObject); // ⚠️ dùng parent mới đúng
-            Debug.Log("🗑️ Đã xoá lá bài: " + cardName);
+            Destroy(cardToRemove.transform.parent.gameObject);
+            Debug.Log("Đã xoá lá bài: " + cardName);
 
             ArrangeCards();
-            GameManager.Instance?.UpdatePlayerCardCount(); // ✅ cập nhật số bài
+            GameManager.Instance?.UpdatePlayerCardCount();
         }
         else
         {
-            Debug.LogWarning("⚠️ Không tìm thấy lá bài để xoá: " + cardName);
+            Debug.LogWarning("Không tìm thấy lá bài để xoá: " + cardName);
         }
     }
+    
     public void AddCard(GameObject cardPrefab, CardData data)
     {
         GameObject cardObj = Instantiate(cardPrefab);
         cardObj.transform.SetParent(transform, false);
 
-        Card cardComp = cardObj.GetComponentInChildren<Card>(); // 👈 giống như trong DrawCard
+        Card cardComp = cardObj.GetComponentInChildren<Card>();
 
         if (cardComp != null)
         {
@@ -232,13 +289,13 @@ public class CardHolder : MonoBehaviour
 
             RegisterCardEvents(cardComp);
             ArrangeCards();
-            GameManager.Instance?.UpdatePlayerCardCount(); // ✅ cập nhật số bài
+            GameManager.Instance?.UpdatePlayerCardCount();
 
-            Debug.Log("📥 Đã thêm lá bài: " + data.cardName);
+            Debug.Log("Đã thêm lá bài: " + data.cardName);
         }
         else
         {
-            Debug.LogError("❌ Không tìm thấy component Card trong prefab!");
+            Debug.LogError("Không tìm thấy component Card trong prefab!");
         }
     }
 }
