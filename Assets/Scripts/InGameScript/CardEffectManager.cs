@@ -19,7 +19,6 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     
     // Biến để kiểm soát việc chơi bài khi có exploding
     // QUAN TRỌNG: Đây là nguồn dữ liệu chính cho trạng thái exploding trong game
-    // GameManager và NopeManager đều tham chiếu đến các biến này
     [HideInInspector] public static bool IsExplodingInProgress = false;
     [HideInInspector] public static int ExplodingPlayerId = -1;
     
@@ -31,12 +30,11 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         {"Exploding", Color.red},           // Đỏ cho Exploding
         {"Defuse", Color.green},            // Xanh lá cho Defuse  
-        {"Attack", new Color(1f, 0.5f, 0f)},          // Tím cho Attack
+        {"Attack", new Color(1f, 0.5f, 0f)},          // Cam cho Attack
         {"Skip", Color.cyan},               // Xanh dương cho Skip
         {"Favor", Color.yellow},            // Vàng cho Favor
         {"Shuffle", Color.blue},            // Xanh đậm cho Shuffle
         {"SeeTheFuture", Color.magenta}, // Cam cho SeeTheFuture
-        {"Nope", Color.red},              // Đen cho Nope
         {"Combo2", new Color(0.5f, 0f, 1f)}, // Tím nhạt cho Combo 2
         {"Combo3", new Color(1f, 0f, 0.5f)}  // Hồng cho Combo 3
     };
@@ -50,29 +48,6 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         else if (Instance != this)
         {
             Destroy(gameObject);
-        }
-        
-        // Khởi tạo màu sắc cho các effect
-        InitializeEffectColors();
-    }
-    
-    private void InitializeEffectColors()
-    {
-        if (effectColors == null)
-        {
-            effectColors = new Dictionary<string, Color>
-            {
-                {"Exploding", Color.red},           // Đỏ cho Exploding
-                {"Defuse", Color.green},            // Xanh lá cho Defuse  
-                {"Attack", Color.magenta},          // Tím cho Attack
-                {"Skip", Color.cyan},               // Xanh dương cho Skip
-                {"Favor", Color.yellow},            // Vàng cho Favor
-                {"Shuffle", Color.blue},            // Xanh đậm cho Shuffle
-                {"SeeTheFuture", new Color(1f, 0.5f, 0f)}, // Cam cho SeeTheFuture
-                {"Nope", Color.black},              // Đen cho Nope
-                {"Combo2", new Color(0.5f, 0f, 1f)}, // Tím nhạt cho Combo 2
-                {"Combo3", new Color(1f, 0f, 0.5f)}  // Hồng cho Combo 3
-            };
         }
     }
     
@@ -105,20 +80,10 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         {
             // Hiển thị combo effect với countdown
             string comboType = comboCards.Count == 2 ? "Combo2" : "Combo3";
-            ShowCountdownEffect(comboType, 5);
+            ShowCountdownEffect(comboType, 3);
             
-            // Cho phép Nope trong 5 giây trước khi thực hiện combo
-            if (NopeManager.Instance != null)
-            {
-                // Sử dụng string thay vì object để dễ so sánh
-                string comboKey = $"Combo_{comboCards.Count}_{PhotonNetwork.LocalPlayer.ActorNumber}";
-                NopeManager.Instance.StartComboNopeWindow(comboCards, comboKey);
-            }
-            else
-            {
-                // Nếu không có NopeManager, thực hiện ngay
-                normalCardComboUI.HandleNormalCardCombo(comboCards);
-            }
+            // Thực hiện combo ngay lập tức
+            normalCardComboUI.HandleNormalCardCombo(comboCards);
         }
     }
     
@@ -389,10 +354,6 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
                 HandleFavorEffect(activatingPlayerId);
                 break;
                 
-            case "Nope":
-                HandleNopeEffect(activatingPlayerId);
-                break;
-                
             case "Shuffle":
                 HandleShuffleEffect(activatingPlayerId);
                 break;
@@ -494,7 +455,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         // Gửi RPC để loại bỏ player
         if (PhotonNetwork.IsMasterClient)
         {
-            photonView.RPC("RPC_EliminatePlayer", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
+            photonView.RPC("RPC_PlayerEliminated", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
         }
     }
     
@@ -505,7 +466,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         // Hiển thị effect Defuse ngay lập tức
         ShowInstantEffect("Defuse");
         
-        // Defuse KHÔNG thể bị Nope - đây là thẻ gỡ bom đặc biệt
+        // Defuse là thẻ gỡ bom đặc biệt
         // Chỉ được sử dụng khi rút phải Exploding Kitten
         Debug.Log("Defuse cards cannot be played directly - only used to defuse Exploding Kittens");
     }
@@ -514,86 +475,50 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"Xử lý hiệu ứng Attack từ người chơi {playerId}");
         
-        // Hiển thị effect Attack ngay lập tức
-        ShowInstantEffect("Attack");
+        // Hiển thị effect Attack với countdown
+        ShowCountdownEffect("Attack", 2);
         
-        // Attack kích hoạt NGAY LẬP TỨC
+        // Thực hiện hiệu ứng ngay
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
             GameManager.Instance.ProcessAttackPlayed();
         }
-        
-        // Mở Nope window cho đến khi có người rút bài (nhưng không ảnh hưởng đến việc kích hoạt)
-        if (NopeManager.Instance != null)
-        {
-            NopeManager.Instance.StartNopeWindow("Attack", playerId);
-        }
     }
-
+    
     private void HandleFavorEffect(int playerId)
     {
         Debug.Log($"[Favor] Xử lý hiệu ứng Favor từ player {playerId}");
         
-        // Hiển thị effect Favor với countdown 5 giây
-        ShowCountdownEffect("Favor", 5);
+        // Hiển thị effect Favor với countdown
+        ShowCountdownEffect("Favor", 2);
         
-        // Cho phép Nope trong 5 giây
-        if (NopeManager.Instance != null)
+        // Thực hiện hiệu ứng ngay
+        if (PhotonNetwork.LocalPlayer.ActorNumber == playerId && FavorTargetSelectUI.Instance != null)
         {
-            NopeManager.Instance.StartFavorNopeWindow(playerId);
-        }
-        else
-        {
-            // Nếu không có NopeManager, thực hiện ngay
-            if (PhotonNetwork.LocalPlayer.ActorNumber == playerId && FavorTargetSelectUI.Instance != null)
-            {
-                FavorTargetSelectUI.Instance.Show(
-                    GameManager.Instance.playerList,
-                    PhotonNetwork.LocalPlayer.ActorNumber,
-                    (targetPlayerId) =>
-                    {
-                        Debug.Log("[Favor] Đã chọn người chơi có ID: " + targetPlayerId);
-                        photonView.RPC("RPC_RequestFavorCard", RpcTarget.All, playerId, targetPlayerId);
-                    }
-                );
-            }
+            FavorTargetSelectUI.Instance.Show(
+                GameManager.Instance.playerList,
+                PhotonNetwork.LocalPlayer.ActorNumber,
+                (targetPlayerId) =>
+                {
+                    Debug.Log("[Favor] Đã chọn người chơi có ID: " + targetPlayerId);
+                    photonView.RPC("RPC_RequestFavorCard", RpcTarget.All, playerId, targetPlayerId);
+                }
+            );
         }
     }
 
-    private void HandleNopeEffect(int playerId)
-    {
-        Debug.Log($"Xử lý hiệu ứng Nope từ người chơi {playerId}");
-        
-        // Hiển thị effect Nope ngay lập tức
-        ShowInstantEffect("Nope");
-        
-        // Gọi NopeManager xử lý logic Nope
-        // Nope có thể được chơi bởi bất kỳ ai (không chỉ người có lượt)
-        if (NopeManager.Instance != null)
-        {
-            NopeManager.Instance.PlayNopeCard(playerId);
-        }
-        else
-        {
-            Debug.LogWarning("NopeManager Instance is null when trying to play Nope!");
-        }
-    }
+
     
     private void HandleShuffleEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Shuffle từ người chơi {playerId}");
         
-        // Hiển thị effect Shuffle với countdown 5 giây
-        ShowCountdownEffect("Shuffle", 5);
+        // Hiển thị effect Shuffle với countdown
+        ShowCountdownEffect("Shuffle", 2);
         
-        // Cho phép Nope trong 5 giây
-        if (NopeManager.Instance != null)
+        // Thực hiện hiệu ứng ngay
+        if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
-            NopeManager.Instance.StartShuffleNopeWindow(playerId);
-        }
-        else
-        {
-            // Nếu không có NopeManager, thực hiện ngay
             CardManager.Instance.PhotonView.RPC("RPC_RequestShuffle", RpcTarget.MasterClient);
         }
     }
@@ -609,19 +534,13 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             return;
         }
         
-        // Hiển thị effect Skip ngay lập tức
-        ShowInstantEffect("Skip");
+        // Hiển thị effect Skip với countdown
+        ShowCountdownEffect("Skip", 2);
         
-        // Skip kích hoạt NGAY LẬP TỨC
+        // Thực hiện hiệu ứng ngay
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
             GameManager.Instance.ProcessSkipPlayed();
-        }
-        
-        // Mở Nope window cho đến khi có người rút bài (nhưng không ảnh hưởng đến việc kích hoạt)
-        if (NopeManager.Instance != null)
-        {
-            NopeManager.Instance.StartNopeWindow("Skip", playerId);
         }
     }
     
@@ -737,10 +656,9 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             }
             
             // Đặt màu cho effect
-            string effectKey = effectName.Contains("Combo") ? effectName : effectName;
-            if (effectColors.ContainsKey(effectKey))
+            if (effectColors.ContainsKey(effectName))
             {
-                CurrentEffectText.color = effectColors[effectKey];
+                CurrentEffectText.color = effectColors[effectName];
             }
             else
             {
@@ -764,11 +682,11 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             yield return new WaitForSeconds(1f);
         }
         
-        // Khi hết thời gian, hiển thị effect đang kích hoạt
+        // Khi hết thời gian, chỉ hiển thị "Activated!" ngắn gọn
         if (CurrentEffectText != null)
         {
             CurrentEffectText.text = $"{effectName} Activated!";
-            yield return new WaitForSeconds(2f);
+            yield return new WaitForSeconds(0.5f); // Giảm từ 2s xuống 0.5s
             CurrentEffectText.text = "";
         }
     }
@@ -874,28 +792,18 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     { 
         Debug.Log("See the future effect handled");
         
-        // Hiển thị effect SeeTheFuture với countdown 5 giây
-        ShowCountdownEffect("SeeTheFuture", 5);
+        // Hiển thị effect SeeTheFuture với countdown
+        ShowCountdownEffect("SeeTheFuture", 2);
         
-        // Cho phép Nope trong 5 giây
-        if (NopeManager.Instance != null)
+        // Thực hiện hiệu ứng ngay
+        if (PhotonNetwork.LocalPlayer.ActorNumber == playerId && CardManager.Instance != null)
         {
-            NopeManager.Instance.StartSeeTheFutureNopeWindow(playerId);
-        }
-        else
-        {
-            // Nếu không có NopeManager, thực hiện ngay
-            if (CardManager.Instance != null)
-            {
-                Debug.Log("Processing SeeTheFuture effect - showing top 3 cards");
-                CardManager.Instance.PhotonView.RPC("RPC_RequestSeeTheFuture", RpcTarget.MasterClient, playerId);
-            }
+            Debug.Log("Processing SeeTheFuture effect - showing top 3 cards");
+            CardManager.Instance.PhotonView.RPC("RPC_RequestSeeTheFuture", RpcTarget.MasterClient, playerId);
         }
         
         Debug.Log("SeeTheFuture effect setup completed");
     }
-
-    // Khi có người rút bài, reset trạng thái Nope - handled in new Nope system
 
     // Phương thức trung tâm để thay đổi trạng thái exploding với debug logging
     public static void SetExplodingState(bool inProgress, int playerId = -1)
@@ -926,12 +834,6 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("ForceResetUIState: Resetting all UI states");
         
-        // Reset Nope state
-        if (NopeManager.Instance != null)
-        {
-            NopeManager.Instance.EndNopeWindow();
-        }
-        
         // Reset effect text
         HideEffect();
         
@@ -960,16 +862,10 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             FavorTargetSelectUI.Instance.gameObject.SetActive(false);
         }
         
-        // Đảm bảo NopeManager được reset
-        if (NopeManager.Instance != null)
-        {
-            NopeManager.Instance.EndNopeWindow();
-        }
+
         
         Debug.Log("ForceResetUIState completed");
     }
-
-    // ==== END NOPE SYSTEM ====
 
     // Public method để reset UI state - có thể được gọi từ GameManager hoặc các component khác
     public void ResetAllUIState()
@@ -977,21 +873,13 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         Debug.Log("ResetAllUIState called from external component");
         ForceResetUIState();
     }
-
-    // ==== PUBLIC METHODS FOR NOPEMANAGER ACCESS ===
+    
+    // Hàm phụ trợ
     public void HideAllComboPanels()
     {
         if (normalCardComboUI != null)
         {
             normalCardComboUI.HideAllPanels();
-        }
-    }
-    
-    public void ExecuteCombo(List<Card> comboCards)
-    {
-        if (normalCardComboUI != null)
-        {
-            normalCardComboUI.HandleNormalCardCombo(comboCards);
         }
     }
     

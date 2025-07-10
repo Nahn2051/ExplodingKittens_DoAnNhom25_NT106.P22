@@ -46,31 +46,8 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
 
         if (!GameManager.Instance.IsLocalPlayerTurn())
         {
-            // Kiểm tra nếu là thẻ Nope - có thể chơi bất cứ lúc nào
-            GameObject checkDraggedObject = eventData.pointerDrag;
-            if (checkDraggedObject != null)
-            {
-                Card draggedCard = checkDraggedObject.GetComponent<Card>();
-                if (draggedCard != null && draggedCard.data.effect == "Nope")
-                {
-                    if (!NopeManager.IsCanPlayNope)
-                    {
-                        Debug.Log("Cannot play Nope - no Nope window is open!");
-                        return;
-                    }
-                    // Cho phép Nope tiếp tục
-                }
-                else
-                {
-                    Debug.Log("Cannot play cards - not your turn!");
-                    return;
-                }
-            }
-            else
-            {
-                Debug.Log("Cannot play cards - not your turn!");
-                return;
-            }
+            Debug.Log("Cannot play cards - not your turn!");
+            return;
         }
 
         GameObject draggedObject = eventData.pointerDrag;
@@ -294,16 +271,8 @@ public class PlayCardZone : MonoBehaviour, IDropHandler
                 return;
             }
             
-            // Đặc biệt cho Nope: có thể chơi bất cứ lúc nào khi có Nope window
-            if (card.data.effect == "Nope")
-            {
-                if (!NopeManager.IsCanPlayNope)
-                {
-                    Debug.LogWarning("Cannot play Nope - no Nope window is open!");
-                    return;
-                }
-            }
-            else if (!GameManager.Instance.IsLocalPlayerTurn())
+            // Kiểm tra xem có phải lượt của người chơi không
+            if (!GameManager.Instance.IsLocalPlayerTurn())
             {
                 Debug.LogWarning("Cannot play action cards - not your turn!");
                 return;

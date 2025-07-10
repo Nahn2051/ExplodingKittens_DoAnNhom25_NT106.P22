@@ -191,10 +191,10 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     private IEnumerator ProcessTurnAfterDrawing()
     {
-        // Thông báo CardEffectManager rằng có người rút bài (để reset Nope window cho Attack/Skip)
+        // Thông báo CardEffectManager rằng có người rút bài
         if (CardEffectManager.Instance != null)
         {
-            NopeManager.Instance.OnPlayerDrawCard();
+            // Có thể thêm xử lý khi người chơi rút bài nếu cần
         }
         
         // Giảm thời gian chờ từ 0.5s xuống 0.1s
@@ -661,7 +661,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         return count;
     }
 
-    // Add this method for NopeManager/Skip effect
+    // Phương thức để quay lại lượt của một người chơi cụ thể
     public void ReturnTurnToPlayer(int playerId)
     {
         // Find the index of the player in playerList by ActorNumber
