@@ -191,7 +191,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.IsMasterClient)
         {
             Debug.Log("Master client loading game scene...");
-            PhotonNetwork.LoadLevel("SampleScene");
+            PhotonNetwork.LoadLevel("LobbyScene");
         }
     }
     
@@ -246,7 +246,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         }
         
         // Load the main menu scene
-        SceneManager.LoadScene("JoinRoomScene");
+        SceneManager.LoadScene("JoinScene");
     }
     
     [PunRPC]
