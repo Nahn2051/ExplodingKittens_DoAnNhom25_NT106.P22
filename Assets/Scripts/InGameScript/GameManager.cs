@@ -11,9 +11,6 @@ public class GameManager : MonoBehaviourPunCallbacks
 {
     public static GameManager Instance;
     
-    [Header("Game Settings")]
-    [SerializeField] private int initialCardCount = 5; // 1 Defuse + 4 other cards (no Exploding)
-    
     [Header("UI References")]
     [SerializeField] private GameObject playerSlotPrefab;
     [SerializeField] private Transform playerSlotsContainer;
@@ -194,8 +191,14 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     private IEnumerator ProcessTurnAfterDrawing()
     {
-        // Chờ một chút để RPC rút bài có thời gian thực hiện
-        yield return new WaitForSeconds(0.5f);
+        // Thông báo CardEffectManager rằng có người rút bài (để reset Nope window cho Attack/Skip)
+        if (CardEffectManager.Instance != null)
+        {
+            NopeManager.Instance.OnPlayerDrawCard();
+        }
+        
+        // Giảm thời gian chờ từ 0.5s xuống 0.1s
+        yield return new WaitForSeconds(0.1f);
 
         attackTurns--; // Giảm số lượt tấn công còn lại
 

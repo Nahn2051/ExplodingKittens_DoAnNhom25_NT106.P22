@@ -142,63 +142,11 @@ public class GameSetUI : MonoBehaviourPunCallbacks
         // Có thể thêm UI hiển thị khi player bị loại (không phải game over hoàn toàn)
         if (isLocalPlayer)
         {
-            StartCoroutine(ShowEliminationMessage("You have been eliminated!"));
+            Debug.Log("You have been eliminated!");
         }
         else
         {
-            StartCoroutine(ShowEliminationMessage($"{playerName} has been eliminated!"));
+            Debug.Log($"{playerName} has been eliminated!");
         }
-    }
-    
-    private IEnumerator ShowEliminationMessage(string message)
-    {
-        // Tạo temporary UI để hiển thị thông báo elimination
-        GameObject tempMessage = new GameObject("EliminationMessage");
-        tempMessage.transform.SetParent(transform);
-        
-        Canvas canvas = tempMessage.AddComponent<Canvas>();
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 1000;
-        
-        TMP_Text messageText = tempMessage.AddComponent<TextMeshProUGUI>();
-        messageText.text = message;
-        messageText.fontSize = 36;
-        messageText.color = Color.red;
-        messageText.alignment = TextAlignmentOptions.Center;
-        
-        RectTransform rect = tempMessage.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0.5f, 0.5f);
-        rect.anchorMax = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = Vector2.zero;
-        rect.sizeDelta = new Vector2(400, 100);
-        
-        // Fade in
-        CanvasGroup canvasGroup = tempMessage.AddComponent<CanvasGroup>();
-        canvasGroup.alpha = 0f;
-        
-        float duration = 0.5f;
-        float elapsedTime = 0f;
-        
-        while (elapsedTime < duration)
-        {
-            elapsedTime += Time.deltaTime;
-            canvasGroup.alpha = Mathf.Lerp(0f, 1f, elapsedTime / duration);
-            yield return null;
-        }
-        
-        // Hiển thị trong 3 giây
-        yield return new WaitForSeconds(3f);
-        
-        // Fade out
-        elapsedTime = 0f;
-        while (elapsedTime < duration)
-        {
-            elapsedTime += Time.deltaTime;
-            canvasGroup.alpha = Mathf.Lerp(1f, 0f, elapsedTime / duration);
-            yield return null;
-        }
-        
-        // Destroy
-        Destroy(tempMessage);
     }
 }

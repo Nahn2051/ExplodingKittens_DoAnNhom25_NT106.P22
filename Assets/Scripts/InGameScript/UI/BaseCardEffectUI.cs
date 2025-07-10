@@ -18,8 +18,6 @@ public abstract class BaseCardEffectUI : MonoBehaviour
     [SerializeField] protected float fadeInDuration = 0.5f;
     [SerializeField] protected float fadeOutDuration = 0.3f;
     
-    protected bool isUIActive = false;
-    
     protected virtual void Start()
     {
         // Ẩn UI ban đầu
@@ -41,10 +39,6 @@ public abstract class BaseCardEffectUI : MonoBehaviour
     
     public virtual void ShowUI()
     {
-        if (isUIActive) return;
-        
-        isUIActive = true;
-        
         if (mainPanel != null)
             mainPanel.SetActive(true);
             
@@ -63,8 +57,6 @@ public abstract class BaseCardEffectUI : MonoBehaviour
     
     public virtual void HideUI()
     {
-        if (!isUIActive) return;
-        
         // Animation hide
         if (panelAnimator != null)
         {
@@ -81,8 +73,6 @@ public abstract class BaseCardEffectUI : MonoBehaviour
     
     protected virtual void HideUIComplete()
     {
-        isUIActive = false;
-        
         if (mainPanel != null)
             mainPanel.SetActive(false);
             

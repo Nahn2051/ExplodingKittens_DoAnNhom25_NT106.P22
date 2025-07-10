@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build and Test Game",
+			"type": "shell",
+			"command": "echo",
+			"args": [
+				"Build completed. Please test the game in Unity Editor to verify Nope functionality with Attack cards."
+			],
+			"group": "build",
+			"isBackground": false
+		}
+	]
+}

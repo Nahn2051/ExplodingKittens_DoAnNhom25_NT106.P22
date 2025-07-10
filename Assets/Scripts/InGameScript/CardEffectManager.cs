@@ -10,6 +10,7 @@ using System.Linq;
 public class CardEffectManager : MonoBehaviourPunCallbacks
 {
     public static CardEffectManager Instance;
+    [SerializeField] private TMP_Text CurrentEffectText;
     
     [Header("UI Components")]
     [SerializeField] private ExplodingKittenUI explodingKittenUI;
@@ -17,8 +18,28 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     [SerializeField] private GameSetUI gameSetUI;
     
     // Biến để kiểm soát việc chơi bài khi có exploding
+    // QUAN TRỌNG: Đây là nguồn dữ liệu chính cho trạng thái exploding trong game
+    // GameManager và NopeManager đều tham chiếu đến các biến này
     [HideInInspector] public static bool IsExplodingInProgress = false;
     [HideInInspector] public static int ExplodingPlayerId = -1;
+    
+    // Biến để quản lý hiển thị effect
+    private Coroutine currentEffectCoroutine;
+    
+    // Màu sắc cho từng loại effect
+    private Dictionary<string, Color> effectColors = new Dictionary<string, Color>
+    {
+        {"Exploding", Color.red},           // Đỏ cho Exploding
+        {"Defuse", Color.green},            // Xanh lá cho Defuse  
+        {"Attack", new Color(1f, 0.5f, 0f)},          // Tím cho Attack
+        {"Skip", Color.cyan},               // Xanh dương cho Skip
+        {"Favor", Color.yellow},            // Vàng cho Favor
+        {"Shuffle", Color.blue},            // Xanh đậm cho Shuffle
+        {"SeeTheFuture", Color.magenta}, // Cam cho SeeTheFuture
+        {"Nope", Color.red},              // Đen cho Nope
+        {"Combo2", new Color(0.5f, 0f, 1f)}, // Tím nhạt cho Combo 2
+        {"Combo3", new Color(1f, 0f, 0.5f)}  // Hồng cho Combo 3
+    };
     
     private void Awake()
     {
@@ -29,6 +50,29 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         else if (Instance != this)
         {
             Destroy(gameObject);
+        }
+        
+        // Khởi tạo màu sắc cho các effect
+        InitializeEffectColors();
+    }
+    
+    private void InitializeEffectColors()
+    {
+        if (effectColors == null)
+        {
+            effectColors = new Dictionary<string, Color>
+            {
+                {"Exploding", Color.red},           // Đỏ cho Exploding
+                {"Defuse", Color.green},            // Xanh lá cho Defuse  
+                {"Attack", Color.magenta},          // Tím cho Attack
+                {"Skip", Color.cyan},               // Xanh dương cho Skip
+                {"Favor", Color.yellow},            // Vàng cho Favor
+                {"Shuffle", Color.blue},            // Xanh đậm cho Shuffle
+                {"SeeTheFuture", new Color(1f, 0.5f, 0f)}, // Cam cho SeeTheFuture
+                {"Nope", Color.black},              // Đen cho Nope
+                {"Combo2", new Color(0.5f, 0f, 1f)}, // Tím nhạt cho Combo 2
+                {"Combo3", new Color(1f, 0f, 0.5f)}  // Hồng cho Combo 3
+            };
         }
     }
     
@@ -57,9 +101,42 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     // Public method để xử lý combo normal cards
     public void HandleNormalCardCombo(List<Card> comboCards)
     {
+        if (normalCardComboUI != null && comboCards.Count >= 2)
+        {
+            // Hiển thị combo effect với countdown
+            string comboType = comboCards.Count == 2 ? "Combo2" : "Combo3";
+            ShowCountdownEffect(comboType, 5);
+            
+            // Cho phép Nope trong 5 giây trước khi thực hiện combo
+            if (NopeManager.Instance != null)
+            {
+                // Sử dụng string thay vì object để dễ so sánh
+                string comboKey = $"Combo_{comboCards.Count}_{PhotonNetwork.LocalPlayer.ActorNumber}";
+                NopeManager.Instance.StartComboNopeWindow(comboCards, comboKey);
+            }
+            else
+            {
+                // Nếu không có NopeManager, thực hiện ngay
+                normalCardComboUI.HandleNormalCardCombo(comboCards);
+            }
+        }
+    }
+    
+    // Public method để hiển thị thông báo hướng dẫn combo
+    public void ShowComboHelpMessage()
+    {
         if (normalCardComboUI != null)
         {
-            normalCardComboUI.HandleNormalCardCombo(comboCards);
+            normalCardComboUI.ShowComboHelpMessage();
+        }
+    }
+    
+    // Public method để hiển thị trạng thái combo selection
+    public void ShowComboSelectionStatus(int selectedCount, string cardType)
+    {
+        if (normalCardComboUI != null)
+        {
+            normalCardComboUI.ShowComboSelectionStatus(selectedCount, cardType);
         }
     }
     
@@ -78,49 +155,97 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     
     private void OnDefuseConfirmed(int position)
     {
+        Debug.Log($"OnDefuseConfirmed called with position {position}");
+        
         // Gửi RPC để đặt lại exploding card vào deck
+        // RPC_ReinsertExplodingCard sẽ gọi RPC_EndExplodingState để reset trạng thái cho tất cả client
         photonView.RPC("RPC_ReinsertExplodingCard", RpcTarget.MasterClient, position);
         
-        // Reset trạng thái exploding
-        IsExplodingInProgress = false;
-        ExplodingPlayerId = -1;
-        
-        // Resume turn switching - exploding đã được xử lý xong
-        if (GameManager.Instance != null)
+        // Chỉ chuyển lượt nếu là MasterClient
+        // (trạng thái exploding sẽ được reset bởi RPC_EndExplodingState)
+        if (PhotonNetwork.IsMasterClient)
         {
-            GameManager.Instance.SetExplodingInProgress(false);
-            
-            // Chuyển lượt sang người tiếp theo
-            if (PhotonNetwork.IsMasterClient)
-            {
-                StartCoroutine(ResumeTurnAfterDelay(1f));
-            }
+            StartCoroutine(ResumeTurnAfterDelay(0.3f));
         }
     }
     
     private void OnRestartGame()
     {
-        // Xử lý restart game
-        PhotonNetwork.LoadLevel("SampleScene");
+        Debug.Log("Restarting game...");
+        
+        // Make sure all players are notified about restart
+        photonView.RPC("RPC_RestartGame", RpcTarget.All);
+        
+        // Host will load the level
+        if (PhotonNetwork.IsMasterClient)
+        {
+            // Wait a moment to let the RPC propagate
+            StartCoroutine(RestartGameAfterDelay(1.0f));
+        }
+    }
+    
+    private IEnumerator RestartGameAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        if (PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log("Master client loading game scene...");
+            PhotonNetwork.LoadLevel("SampleScene");
+        }
+    }
+    
+    [PunRPC]
+    private void RPC_RestartGame()
+    {
+        Debug.Log("Received restart game RPC");
+        // Any cleanup needed before scene reload can be done here
     }
     
     private IEnumerator ResumeTurnAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
         
-        if (GameManager.Instance != null)
+        // Chỉ master client xử lý việc chuyển lượt sau khi defuse
+        if (PhotonNetwork.IsMasterClient && GameManager.Instance != null)
         {
+            // Đảm bảo exploding state đã được reset trước khi chuyển lượt
+            Debug.Log("Master client resuming turn after defuse");
+            
+            // Lấy người chơi hiện tại và chuyển sang người tiếp theo
             int currentTurn = GameManager.Instance.GetCurrentTurnIndex();
             int nextPlayer = GameManager.Instance.GetNextAlivePlayerIndex(currentTurn);
-                
-            GameManager.Instance.StartTurn(nextPlayer);
+            
+            // Chuyển lượt với 1 turn bình thường (không còn attack turns)
+            GameManager.Instance.StartTurn(nextPlayer, 1);
+        }
+        else
+        {
+            Debug.Log("Non-master client waiting for turn change from master");
         }
     }
     
     private void OnReturnToMainMenu()
     {
-        // Xử lý return to main menu
-        PhotonNetwork.LeaveRoom();
+        Debug.Log("Returning to main menu...");
+        
+        // Notify all clients to leave room
+        photonView.RPC("RPC_ReturnToMainMenu", RpcTarget.All);
+    }
+    
+    [PunRPC]
+    private void RPC_ReturnToMainMenu()
+    {
+        Debug.Log("Leaving room and returning to main menu");
+        
+        // Clean up and disconnect
+        if (PhotonNetwork.IsConnected)
+        {
+            // Leave the room but stay connected
+            PhotonNetwork.LeaveRoom();
+        }
+        
+        // Load the main menu scene
         SceneManager.LoadScene("JoinRoomScene");
     }
     
@@ -132,7 +257,8 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         // Hiển thị thông báo cho người bị chọn
         if (PhotonNetwork.LocalPlayer.ActorNumber == toPlayerId)
         {
-            ShowTargetPlayerMessage("You have been selected! A random card will be taken.");
+            Debug.Log("You have been selected! A random card will be taken.");
+            // Có thể thêm UI notification ở đây nếu cần
         }
         
         // Logic để lấy 1 lá bài ngẫu nhiên từ target player
@@ -165,7 +291,8 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         // Hiển thị thông báo cho người bị chọn
         if (PhotonNetwork.LocalPlayer.ActorNumber == toPlayerId)
         {
-            ShowTargetPlayerMessage($"You have been selected! Player requests {requestedCardType}.");
+            Debug.Log($"You have been selected! Player requests {requestedCardType}.");
+            // Có thể thêm UI notification ở đây nếu cần
         }
         
         // Logic để lấy lá bài cụ thể từ target player
@@ -229,12 +356,12 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     }
     
     // Xử lý kích hoạt hiệu ứng thẻ bài
-    public void ActivateCardEffect(string effectType, int cardId)
+    public void ActivateCardEffect(string effectType, int activatingPlayerId)
     {
         // Đảm bảo chỉ có người chơi đến lượt mới kích hoạt hiệu ứng
         if (GameManager.Instance != null)
         {
-            photonView.RPC("RPC_ActivateCardEffect", RpcTarget.All, effectType, cardId, PhotonNetwork.LocalPlayer.ActorNumber);
+            photonView.RPC("RPC_ActivateCardEffect", RpcTarget.All, effectType, 0, activatingPlayerId);
         }
     }
     
@@ -299,9 +426,11 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         Debug.Log($"HandleExplodingEffect called for player {playerId}");
         Debug.Log($"Local player ActorNumber: {PhotonNetwork.LocalPlayer.ActorNumber}");
         
+        // Hiển thị effect Exploding ngay lập tức
+        ShowInstantEffect("Exploding");
+        
         // Đặt trạng thái exploding đang diễn ra cho toàn bộ game
-        IsExplodingInProgress = true;
-        ExplodingPlayerId = playerId;
+        SetExplodingState(true, playerId);
         
         // Chỉ người chơi rút bài exploding mới thấy UI
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
@@ -372,86 +501,128 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     private void HandleDefuseEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Defuse từ người chơi {playerId}");
-        // TODO: Implement khi game phát triển thêm
+        
+        // Hiển thị effect Defuse ngay lập tức
+        ShowInstantEffect("Defuse");
+        
+        // Defuse KHÔNG thể bị Nope - đây là thẻ gỡ bom đặc biệt
+        // Chỉ được sử dụng khi rút phải Exploding Kitten
+        Debug.Log("Defuse cards cannot be played directly - only used to defuse Exploding Kittens");
     }
     
     private void HandleAttackEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Attack từ người chơi {playerId}");
-        // Cho phép Nope
-        NopeManager.Instance?.StartNopeWindow("Attack", playerId);
-        // TODO: Implement khi game phát triển thêm
+        
+        // Hiển thị effect Attack ngay lập tức
+        ShowInstantEffect("Attack");
+        
+        // Attack kích hoạt NGAY LẬP TỨC
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
             GameManager.Instance.ProcessAttackPlayed();
         }
-        // Khi effect kết thúc, tắt Nope
-        NopeManager.Instance?.EndNopeWindow();
+        
+        // Mở Nope window cho đến khi có người rút bài (nhưng không ảnh hưởng đến việc kích hoạt)
+        if (NopeManager.Instance != null)
+        {
+            NopeManager.Instance.StartNopeWindow("Attack", playerId);
+        }
     }
 
     private void HandleFavorEffect(int playerId)
     {
         Debug.Log($"[Favor] Xử lý hiệu ứng Favor từ player {playerId}");
-        NopeManager.Instance?.StartNopeWindow("Favor", playerId);
-        if (PhotonNetwork.LocalPlayer.ActorNumber != playerId)
+        
+        // Hiển thị effect Favor với countdown 5 giây
+        ShowCountdownEffect("Favor", 5);
+        
+        // Cho phép Nope trong 5 giây
+        if (NopeManager.Instance != null)
         {
-            Debug.Log("[Favor] Đây không phải lượt của mình.");
-            NopeManager.Instance?.EndNopeWindow();
-            return;
+            NopeManager.Instance.StartFavorNopeWindow(playerId);
         }
-        if (FavorTargetSelectUI.Instance == null)
+        else
         {
-            Debug.LogError("FavorTargetSelectUI.Instance vẫn null!");
-            NopeManager.Instance?.EndNopeWindow();
-            return;
-        }
-        FavorTargetSelectUI.Instance.Show(
-            GameManager.Instance.playerList,
-            PhotonNetwork.LocalPlayer.ActorNumber,
-            (targetPlayerId) =>
+            // Nếu không có NopeManager, thực hiện ngay
+            if (PhotonNetwork.LocalPlayer.ActorNumber == playerId && FavorTargetSelectUI.Instance != null)
             {
-                Debug.Log("[Favor] Đã chọn người chơi có ID: " + targetPlayerId);
-                // Gửi RPC tiếp theo ở đây
-                photonView.RPC("RPC_RequestFavorCard", RpcTarget.All, playerId, targetPlayerId);
-                NopeManager.Instance?.EndNopeWindow();
+                FavorTargetSelectUI.Instance.Show(
+                    GameManager.Instance.playerList,
+                    PhotonNetwork.LocalPlayer.ActorNumber,
+                    (targetPlayerId) =>
+                    {
+                        Debug.Log("[Favor] Đã chọn người chơi có ID: " + targetPlayerId);
+                        photonView.RPC("RPC_RequestFavorCard", RpcTarget.All, playerId, targetPlayerId);
+                    }
+                );
             }
-        );
+        }
     }
 
     private void HandleNopeEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Nope từ người chơi {playerId}");
+        
+        // Hiển thị effect Nope ngay lập tức
+        ShowInstantEffect("Nope");
+        
         // Gọi NopeManager xử lý logic Nope
-        NopeManager.Instance?.PlayNope(playerId);
+        // Nope có thể được chơi bởi bất kỳ ai (không chỉ người có lượt)
+        if (NopeManager.Instance != null)
+        {
+            NopeManager.Instance.PlayNopeCard(playerId);
+        }
+        else
+        {
+            Debug.LogWarning("NopeManager Instance is null when trying to play Nope!");
+        }
     }
     
     private void HandleShuffleEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Shuffle từ người chơi {playerId}");
-        // TODO: Implement khi game phát triển thêm
-        // Yêu cầu Master Client xáo bài
-        CardManager.Instance.PhotonView.RPC("RPC_RequestShuffle", RpcTarget.MasterClient);
+        
+        // Hiển thị effect Shuffle với countdown 5 giây
+        ShowCountdownEffect("Shuffle", 5);
+        
+        // Cho phép Nope trong 5 giây
+        if (NopeManager.Instance != null)
+        {
+            NopeManager.Instance.StartShuffleNopeWindow(playerId);
+        }
+        else
+        {
+            // Nếu không có NopeManager, thực hiện ngay
+            CardManager.Instance.PhotonView.RPC("RPC_RequestShuffle", RpcTarget.MasterClient);
+        }
     }
     
     private void HandleSkipEffect(int playerId)
     {
         Debug.Log($"Xử lý hiệu ứng Skip từ người chơi {playerId}");
-        NopeManager.Instance?.StartNopeWindow("Skip", playerId);
+        
+        // Check if player is still in the game before proceeding
+        if (GameManager.Instance.IsPlayerEliminated(playerId))
+        {
+            Debug.LogError($"Player {playerId} is already eliminated! Cannot process Skip card.");
+            return;
+        }
+        
+        // Hiển thị effect Skip ngay lập tức
+        ShowInstantEffect("Skip");
+        
+        // Skip kích hoạt NGAY LẬP TỨC
         if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
         {
             GameManager.Instance.ProcessSkipPlayed();
         }
-        NopeManager.Instance?.EndNopeWindow();
-        // Reset trạng thái exploding
-        IsExplodingInProgress = false;
-        ExplodingPlayerId = -1;
-        // Resume turn switching - player đã bị loại
-        if (GameManager.Instance != null)
+        
+        // Mở Nope window cho đến khi có người rút bài (nhưng không ảnh hưởng đến việc kích hoạt)
+        if (NopeManager.Instance != null)
         {
-            GameManager.Instance.SetExplodingInProgress(false);
+            NopeManager.Instance.StartNopeWindow("Skip", playerId);
         }
-        // Gửi RPC thông báo player bị loại
-        photonView.RPC("RPC_PlayerEliminated", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
     }
     
     [PunRPC]
@@ -459,9 +630,8 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"Người chơi {eliminatedPlayerId} đã bị loại!");
         
-        // Reset trạng thái exploding cho tất cả
-        IsExplodingInProgress = false;
-        ExplodingPlayerId = -1;
+        // Reset trạng thái exploding cho tất cả sử dụng phương thức trung tâm
+        SetExplodingState(false);
         
         // Thông báo GameManager về việc loại bỏ player
         if (GameManager.Instance != null)
@@ -473,6 +643,8 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     [PunRPC]
     private void RPC_ReinsertExplodingCard(int position)
     {
+        Debug.Log($"RPC_ReinsertExplodingCard called with position {position}");
+        
         // Chỉ master client xử lý việc chèn lại exploding card
         if (PhotonNetwork.IsMasterClient && CardManager.Instance != null)
         {
@@ -485,6 +657,30 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             };
             
             CardManager.Instance.InsertCardIntoDeck(explodingCard, position);
+            Debug.Log($"Master client inserted exploding card at position {position}");
+            
+            // Thông báo cho tất cả client rằng exploding đã kết thúc
+            photonView.RPC("RPC_EndExplodingState", RpcTarget.All);
+        }
+        else
+        {
+            Debug.Log($"Non-master client received RPC_ReinsertExplodingCard - waiting for RPC_EndExplodingState");
+        }
+    }
+    
+    [PunRPC]
+    private void RPC_EndExplodingState()
+    {
+        Debug.Log("RPC_EndExplodingState called - resetting exploding state for all clients");
+        
+        // Reset trạng thái exploding cho tất cả client sử dụng phương thức trung tâm
+        SetExplodingState(false);
+        
+        // Đảm bảo UI được reset
+        if (explodingKittenUI != null)
+        {
+            explodingKittenUI.HideExplodingPanel();
+            explodingKittenUI.HidePositionInputPanel();
         }
     }
     
@@ -501,72 +697,107 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         }
     }
     
-    // Method để hiển thị thông báo cho người bị chọn
-    private void ShowTargetPlayerMessage(string message)
+    // Method để hiển thị effect ngay lập tức (không có countdown)
+    private void ShowInstantEffect(string effectName)
     {
-        if (gameSetUI != null)
+        if (CurrentEffectText != null)
         {
-            gameSetUI.ShowPlayerEliminated(message, true);
-        }
-        else
-        {
-            // Fallback: tạo temporary message
-            StartCoroutine(ShowTemporaryMessage(message));
+            // Dừng coroutine hiện tại nếu có
+            if (currentEffectCoroutine != null)
+            {
+                StopCoroutine(currentEffectCoroutine);
+            }
+            
+            CurrentEffectText.text = effectName;
+            
+            // Đặt màu cho effect
+            if (effectColors.ContainsKey(effectName))
+            {
+                CurrentEffectText.color = effectColors[effectName];
+            }
+            else
+            {
+                CurrentEffectText.color = Color.white; // Màu mặc định
+            }
+            
+            // Hiển thị trong 3 giây rồi ẩn
+            currentEffectCoroutine = StartCoroutine(HideEffectAfterDelay(3f));
         }
     }
     
-    private IEnumerator ShowTemporaryMessage(string message)
+    // Method để hiển thị effect với countdown
+    private void ShowCountdownEffect(string effectName, int countdown)
     {
-        // Tạo temporary UI để hiển thị thông báo
-        GameObject tempMessage = new GameObject("TargetPlayerMessage");
-        tempMessage.transform.SetParent(transform);
-        
-        Canvas canvas = tempMessage.AddComponent<Canvas>();
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 1000;
-        
-        TMP_Text messageText = tempMessage.AddComponent<TextMeshProUGUI>();
-        messageText.text = message;
-        messageText.fontSize = 32;
-        messageText.color = Color.yellow;
-        messageText.alignment = TextAlignmentOptions.Center;
-        
-        RectTransform rect = tempMessage.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0.5f, 0.8f);
-        rect.anchorMax = new Vector2(0.5f, 0.8f);
-        rect.anchoredPosition = Vector2.zero;
-        rect.sizeDelta = new Vector2(500, 80);
-        
-        // Fade in
-        CanvasGroup canvasGroup = tempMessage.AddComponent<CanvasGroup>();
-        canvasGroup.alpha = 0f;
-        
-        float duration = 0.5f;
-        float elapsedTime = 0f;
-        
-        while (elapsedTime < duration)
+        if (CurrentEffectText != null)
         {
-            elapsedTime += Time.deltaTime;
-            canvasGroup.alpha = Mathf.Lerp(0f, 1f, elapsedTime / duration);
-            yield return null;
+            // Dừng coroutine hiện tại nếu có
+            if (currentEffectCoroutine != null)
+            {
+                StopCoroutine(currentEffectCoroutine);
+            }
+            
+            // Đặt màu cho effect
+            string effectKey = effectName.Contains("Combo") ? effectName : effectName;
+            if (effectColors.ContainsKey(effectKey))
+            {
+                CurrentEffectText.color = effectColors[effectKey];
+            }
+            else
+            {
+                CurrentEffectText.color = Color.white; // Màu mặc định
+            }
+            
+            // Bắt đầu countdown
+            currentEffectCoroutine = StartCoroutine(CountdownEffect(effectName, countdown));
         }
-        
-        // Hiển thị trong 3 giây
-        yield return new WaitForSeconds(3f);
-        
-        // Fade out
-        elapsedTime = 0f;
-        while (elapsedTime < duration)
-        {
-            elapsedTime += Time.deltaTime;
-            canvasGroup.alpha = Mathf.Lerp(1f, 0f, elapsedTime / duration);
-            yield return null;
-        }
-        
-        // Destroy
-        Destroy(tempMessage);
     }
-
+    
+    // Coroutine để đếm ngược
+    private IEnumerator CountdownEffect(string effectName, int seconds)
+    {
+        for (int i = seconds; i > 0; i--)
+        {
+            if (CurrentEffectText != null)
+            {
+                CurrentEffectText.text = $"{effectName}: {i}s";
+            }
+            yield return new WaitForSeconds(1f);
+        }
+        
+        // Khi hết thời gian, hiển thị effect đang kích hoạt
+        if (CurrentEffectText != null)
+        {
+            CurrentEffectText.text = $"{effectName} Activated!";
+            yield return new WaitForSeconds(2f);
+            CurrentEffectText.text = "";
+        }
+    }
+    
+    // Coroutine để ẩn effect sau một khoảng thời gian
+    private IEnumerator HideEffectAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (CurrentEffectText != null)
+        {
+            CurrentEffectText.text = "";
+        }
+    }
+    
+    // Method để ẩn effect ngay lập tức
+    public void HideEffect()
+    {
+        if (currentEffectCoroutine != null)
+        {
+            StopCoroutine(currentEffectCoroutine);
+            currentEffectCoroutine = null;
+        }
+        
+        if (CurrentEffectText != null)
+        {
+            CurrentEffectText.text = "";
+        }
+    }
+    
     // Event handlers cho UI components
     
     [PunRPC]
@@ -643,100 +874,133 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     { 
         Debug.Log("See the future effect handled");
         
-        // SeeTheFuture effect: Show top 3 cards from deck
-        if (CardManager.Instance != null)
+        // Hiển thị effect SeeTheFuture với countdown 5 giây
+        ShowCountdownEffect("SeeTheFuture", 5);
+        
+        // Cho phép Nope trong 5 giây
+        if (NopeManager.Instance != null)
         {
-            Debug.Log("Processing SeeTheFuture effect - showing top 3 cards");
-            // TODO: Implement actual SeeTheFuture UI
-            // For now just log that effect completed
+            NopeManager.Instance.StartSeeTheFutureNopeWindow(playerId);
+        }
+        else
+        {
+            // Nếu không có NopeManager, thực hiện ngay
+            if (CardManager.Instance != null)
+            {
+                Debug.Log("Processing SeeTheFuture effect - showing top 3 cards");
+                CardManager.Instance.PhotonView.RPC("RPC_RequestSeeTheFuture", RpcTarget.MasterClient, playerId);
+            }
         }
         
-        // Make sure UI remains interactive after effect
-        Debug.Log("SeeTheFuture effect completed, UI should remain interactive");
+        Debug.Log("SeeTheFuture effect setup completed");
     }
 
-    // Khi có người rút bài, reset trạng thái Nope
-    public void OnPlayerDrawCard()
+    // Khi có người rút bài, reset trạng thái Nope - handled in new Nope system
+
+    // Phương thức trung tâm để thay đổi trạng thái exploding với debug logging
+    public static void SetExplodingState(bool inProgress, int playerId = -1)
     {
-        NopeManager.Instance?.OnPlayerDrawCard();
+        string previousState = $"IsExplodingInProgress={IsExplodingInProgress}, ExplodingPlayerId={ExplodingPlayerId}";
+        
+        IsExplodingInProgress = inProgress;
+        if (inProgress)
+        {
+            ExplodingPlayerId = playerId;
+        }
+        else
+        {
+            ExplodingPlayerId = -1;
+        }
+        
+        Debug.Log($"[EXPLODING STATE] Changed from {previousState} to IsExplodingInProgress={IsExplodingInProgress}, ExplodingPlayerId={ExplodingPlayerId}");
+        
+        // Đồng bộ với GameManager
+        if (Instance != null && GameManager.Instance != null)
+        {
+            GameManager.Instance.SetExplodingInProgress(inProgress);
+        }
     }
 
-    // ==== CÁC HÀM BỔ SUNG ĐỂ NOPEMANAGER GỌI ====
-    public void CancelSkipEffect(int playerId)
+    // Method để force reset UI state khi có vấn đề UI bị đứng
+    private void ForceResetUIState()
     {
-        Debug.Log($"Skip của player {playerId} bị Nope!");
-        if (GameManager.Instance != null)
+        Debug.Log("ForceResetUIState: Resetting all UI states");
+        
+        // Reset Nope state
+        if (NopeManager.Instance != null)
         {
-            GameManager.Instance.ReturnTurnToPlayer(playerId);
+            NopeManager.Instance.EndNopeWindow();
         }
-    }
-    public void ResumeSkipEffect(int playerId)
-    {
-        Debug.Log($"Skip của player {playerId} được phục hồi!");
-        if (GameManager.Instance != null)
+        
+        // Reset effect text
+        HideEffect();
+        
+        // Đảm bảo tất cả UI panels được reset
+        if (normalCardComboUI != null)
         {
-            GameManager.Instance.ProcessSkipPlayed();
+            normalCardComboUI.HideAllPanels();
         }
-    }
-    public void CancelAttackEffect(int playerId)
-    {
-        Debug.Log($"Attack của player {playerId} bị Nope!");
-        // TODO: Implement logic to reset attackTurns or skip attack effect
-        // GameManager.Instance.attackTurns = 1; // If attackTurns is public, or add a method to reset
-    }
-    public void ResumeAttackEffect(int playerId)
-    {
-        Debug.Log($"Attack của player {playerId} được phục hồi!");
-        // TODO: Implement logic to resume attack effect
-    }
-    public void CancelFavorEffect(int playerId)
-    {
-        Debug.Log($"Favor của player {playerId} bị Nope!");
+        
+        // Reset các UI component khác
+        if (explodingKittenUI != null)
+        {
+            explodingKittenUI.HideExplodingPanel();
+            explodingKittenUI.HidePositionInputPanel();
+        }
+        
+        // Reset SeeTheFuture UI nếu có
+        if (SeeTheFutureUI.Instance != null)
+        {
+            SeeTheFutureUI.Instance.gameObject.SetActive(false);
+        }
+        
+        // Reset Favor UI nếu có
         if (FavorTargetSelectUI.Instance != null)
         {
             FavorTargetSelectUI.Instance.gameObject.SetActive(false);
         }
+        
+        // Đảm bảo NopeManager được reset
+        if (NopeManager.Instance != null)
+        {
+            NopeManager.Instance.EndNopeWindow();
+        }
+        
+        Debug.Log("ForceResetUIState completed");
     }
-    public void ResumeFavorEffect(int playerId)
+
+    // ==== END NOPE SYSTEM ====
+
+    // Public method để reset UI state - có thể được gọi từ GameManager hoặc các component khác
+    public void ResetAllUIState()
     {
-        Debug.Log($"Favor của player {playerId} được phục hồi!");
-        // Có thể show lại UI chọn Favor nếu cần
+        Debug.Log("ResetAllUIState called from external component");
+        ForceResetUIState();
     }
-    public void CancelComboEffect(object comboData)
+
+    // ==== PUBLIC METHODS FOR NOPEMANAGER ACCESS ===
+    public void HideAllComboPanels()
     {
-        Debug.Log($"Combo bị Nope!");
         if (normalCardComboUI != null)
         {
             normalCardComboUI.HideAllPanels();
         }
     }
-    public void ResumeComboEffect(object comboData)
+    
+    public void ExecuteCombo(List<Card> comboCards)
     {
-        Debug.Log($"Combo được phục hồi!");
-        // Có thể phục hồi lại combo nếu cần
-    }
-    public void CancelShuffleEffect(int playerId)
-    {
-        Debug.Log($"Shuffle của player {playerId} bị Nope!");
-        // Dừng shuffle nếu đang thực hiện
-    }
-    public void ResumeShuffleEffect(int playerId)
-    {
-        Debug.Log($"Shuffle của player {playerId} được phục hồi!");
-        // Có thể thực hiện lại shuffle nếu cần
-    }
-    public void CancelSeeTheFutureEffect(int playerId)
-    {
-        Debug.Log($"SeeTheFuture của player {playerId} bị Nope!");
-        if (SeeTheFutureUI.Instance != null)
+        if (normalCardComboUI != null)
         {
-            // Panel auto-hides, but if needed:
-            // SeeTheFutureUI.Instance.seeTheFuturePanel.SetActive(false); // if public
+            normalCardComboUI.HandleNormalCardCombo(comboCards);
         }
     }
-    public void ResumeSeeTheFutureEffect(int playerId)
+    
+    public void HideExplodingPanels()
     {
-        Debug.Log($"SeeTheFuture của player {playerId} được phục hồi!");
-        // Có thể show lại UI nếu cần
+        if (explodingKittenUI != null)
+        {
+            explodingKittenUI.HideExplodingPanel();
+            explodingKittenUI.HidePositionInputPanel();
+        }
     }
 }

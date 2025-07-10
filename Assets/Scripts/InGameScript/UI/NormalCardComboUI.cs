@@ -38,11 +38,64 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
             cardSelectionPanel.SetActive(false);
             Debug.Log("NormalCardComboUI: cardSelectionPanel disabled");
         }
+        
+        // Đảm bảo text component không tự động resize
+        if (comboDescriptionText != null)
+        {
+            comboDescriptionText.enableAutoSizing = false;
+            Debug.Log("NormalCardComboUI: Auto-sizing disabled for combo description text");
+        }
+    }
+    
+    // Method to show helpful message when player tries to play normal card individually
+    public void ShowComboHelpMessage()
+    {
+        if (comboDescriptionText != null)
+        {
+            comboDescriptionText.text = "Normal cards must be played in combos! Click 2-3 cards of the same type to select them for combo.";
+            // Show message for a few seconds then hide
+            StartCoroutine(HideHelpMessageAfterDelay(5f));
+        }
+    }
+    
+    // Method to show current combo selection status
+    public void ShowComboSelectionStatus(int selectedCount, string cardType)
+    {
+        if (comboDescriptionText != null)
+        {
+            if (selectedCount == 0)
+            {
+                comboDescriptionText.text = "Click normal cards to select them for combo (2-3 cards of same type)";
+            }
+            else if (selectedCount == 1)
+            {
+                comboDescriptionText.text = $"Selected 1 {cardType} card. Select 1-2 more {cardType} cards to create combo.";
+            }
+            else if (selectedCount == 2)
+            {
+                comboDescriptionText.text = $"2-card combo ready! Auto-executing in 1 second or select 1 more {cardType} for 3-card combo.";
+            }
+            else if (selectedCount == 3)
+            {
+                comboDescriptionText.text = $"3-card combo ready! Auto-executing in 1 second.";
+            }
+        }
+    }
+    
+    private IEnumerator HideHelpMessageAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (comboDescriptionText != null && pendingComboCards.Count == 0)
+        {
+            comboDescriptionText.text = "";
+        }
     }
     
     // Public method để xử lý combo normal cards
     public void HandleNormalCardCombo(List<Card> comboCards)
     {
+        Debug.Log($"NormalCardComboUI.HandleNormalCardCombo: Received combo with {comboCards.Count} cards");
+        
         if (comboCards.Count < 2 || comboCards.Count > 3)
         {
             Debug.LogWarning("Combo must have 2 or 3 cards!");
@@ -51,11 +104,13 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         
         // Kiểm tra tất cả các lá bài có cùng loại không
         string cardType = comboCards[0].data.effect;
+        Debug.Log($"NormalCardComboUI: Checking combo of type {cardType}");
+        
         foreach (Card card in comboCards)
         {
             if (card.data.effect != cardType)
             {
-                Debug.LogWarning("All cards in combo must be of the same type!");
+                Debug.LogWarning($"All cards in combo must be of the same type! Found {card.data.effect} in {cardType} combo");
                 return;
             }
         }
@@ -63,22 +118,59 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         // Kiểm tra có phải normal card không
         if (!IsNormalCard(cardType))
         {
-            Debug.LogWarning("Only Normal cards can create combos!");
+            Debug.LogWarning($"Only Normal cards can create combos! {cardType} is not a normal card");
             return;
         }
         
         // Lưu combo để xử lý
         pendingComboCards = new List<Card>(comboCards);
+        Debug.Log($"NormalCardComboUI: Stored {pendingComboCards.Count} cards for {cardType} combo");
         
         if (comboCards.Count == 2)
         {
-            // Combo 2 lá: chọn người chơi để lấy 1 lá bài ngẫu nhiên
-            StartTwoCardCombo(cardType);
+            // Combo 2 lá: delay để cho phép Nope trước khi hiển thị UI
+            Debug.Log($"NormalCardComboUI: Starting 2-card combo process for {cardType}");
+            StartCoroutine(DelayedTwoCardCombo(cardType, 3f));
         }
         else if (comboCards.Count == 3)
         {
-            // Combo 3 lá: chọn người chơi và chọn loại bài cụ thể
+            // Combo 3 lá: delay để cho phép Nope trước khi hiển thị UI
+            Debug.Log($"NormalCardComboUI: Starting 3-card combo process for {cardType}");
+            StartCoroutine(DelayedThreeCardCombo(cardType, 3f));
+        }
+    }
+    
+    private IEnumerator DelayedTwoCardCombo(string cardType, float delay)
+    {
+        Debug.Log($"NormalCardComboUI: Starting 2-card combo delay ({delay}s) for {cardType}");
+        yield return new WaitForSeconds(delay);
+        
+        // Kiểm tra xem combo có bị Nope không
+        if (pendingComboCards.Count > 0) // Nếu combo chưa bị reset bởi Nope
+        {
+            Debug.Log($"NormalCardComboUI: Delay completed, showing 2-card combo UI for {cardType}");
+            StartTwoCardCombo(cardType);
+        }
+        else
+        {
+            Debug.Log("NormalCardComboUI: 2-card combo was cancelled (likely by Nope)");
+        }
+    }
+    
+    private IEnumerator DelayedThreeCardCombo(string cardType, float delay)
+    {
+        Debug.Log($"NormalCardComboUI: Starting 3-card combo delay ({delay}s) for {cardType}");
+        yield return new WaitForSeconds(delay);
+        
+        // Kiểm tra xem combo có bị Nope không
+        if (pendingComboCards.Count > 0) // Nếu combo chưa bị reset bởi Nope
+        {
+            Debug.Log($"NormalCardComboUI: Delay completed, showing 3-card combo UI for {cardType}");
             StartThreeCardCombo(cardType);
+        }
+        else
+        {
+            Debug.Log("NormalCardComboUI: 3-card combo was cancelled (likely by Nope)");
         }
     }
     
@@ -94,6 +186,8 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         if (comboDescriptionText != null)
         {
             comboDescriptionText.text = $"2-Card Combo ({cardType}): Select a player to steal 1 random card";
+            // Đảm bảo text không bị tự động resize
+            comboDescriptionText.enableAutoSizing = false;
         }
         
         ShowPlayerSelection();
@@ -104,6 +198,8 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         if (comboDescriptionText != null)
         {
             comboDescriptionText.text = $"3-Card Combo ({cardType}): Select a player to steal a specific card";
+            // Đảm bảo text không bị tự động resize
+            comboDescriptionText.enableAutoSizing = false;
         }
         
         ShowPlayerSelection();
@@ -212,6 +308,8 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
     
     private void ExecuteTwoCardCombo()
     {
+        Debug.Log($"NormalCardComboUI.ExecuteTwoCardCombo: Executing 2-card combo for player {PhotonNetwork.LocalPlayer.ActorNumber} targeting player {selectedTargetPlayer}");
+        
         // Trigger event cho CardEffectManager
         OnTwoCardComboExecuted?.Invoke(PhotonNetwork.LocalPlayer.ActorNumber, selectedTargetPlayer);
         
@@ -221,11 +319,27 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
     
     private void ExecuteThreeCardCombo()
     {
+        Debug.Log($"NormalCardComboUI.ExecuteThreeCardCombo: Executing 3-card combo for player {PhotonNetwork.LocalPlayer.ActorNumber} targeting player {selectedTargetPlayer} for card type {selectedCardType}");
+        
         // Trigger event cho CardEffectManager
         OnThreeCardComboExecuted?.Invoke(PhotonNetwork.LocalPlayer.ActorNumber, selectedTargetPlayer, selectedCardType);
         
         // Reset UI
         ResetComboUI();
+    }
+    
+    // Method to cancel pending combo (called when Nope is used)
+    public void CancelPendingCombo()
+    {
+        Debug.Log("NormalCardComboUI: Pending combo cancelled by Nope");
+        StopAllCoroutines(); // Stop any delayed combo coroutines
+        ResetComboUI();
+    }
+    
+    // Method to check if there's a pending combo
+    public bool HasPendingCombo()
+    {
+        return pendingComboCards.Count > 0;
     }
     
     public void HideAllPanels()

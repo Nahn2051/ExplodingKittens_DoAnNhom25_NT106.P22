@@ -295,6 +295,12 @@ public class CardManager : MonoBehaviour
             {
                 GameManager.Instance.UpdatePlayerCardCount();
             }
+            
+            // Thông báo CardEffectManager về việc rút bài để reset Nope state
+            if (CardEffectManager.Instance != null)
+            {
+                NopeManager.Instance.OnPlayerDrawCard();
+            }
         }
         
         // Kiểm tra xem deck có còn bài không
@@ -360,7 +366,26 @@ public class CardManager : MonoBehaviour
         Debug.Log($"Current turn: {currentTurnIndex}, Local player: {localPlayerIndex}, IsLocalPlayerTurn: {GameManager.Instance.IsLocalPlayerTurn()}");
         
         // Kiểm tra xem có phải lượt của người chơi không
-        if (GameManager.Instance.IsLocalPlayerTurn())
+        bool isPlayerTurn = GameManager.Instance.IsLocalPlayerTurn();
+        bool isNopeCard = (card.data.effect == "Nope");
+        
+        // Nope có thể được chơi bất cứ lúc nào (không cần phải đến lượt)
+        // miễn là có cửa sổ Nope đang mở
+        if (isNopeCard)
+        {
+            if (!NopeManager.IsCanPlayNope)
+            {
+                Debug.LogWarning("Cannot play Nope - no Nope window is currently open!");
+                return;
+            }
+        }
+        else if (!isPlayerTurn)
+        {
+            Debug.LogWarning($"Cannot play card - not your turn! Current turn: {currentTurnIndex}, Local player: {localPlayerIndex}");
+            return;
+        }
+        
+        if (isPlayerTurn || isNopeCard)
         {
             Debug.Log($"Player {playerActorNumber} is playing card {card.data.cardName}");
             
@@ -398,7 +423,7 @@ public class CardManager : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning($"Cannot play card - not your turn! Current turn: {currentTurnIndex}, Local player: {localPlayerIndex}");
+            Debug.LogWarning($"Cannot play card {card.data.effect} - conditions not met!");
         }
     }
     

@@ -103,7 +103,11 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
                 return;
             }
         }
-
+        
+        // QUAN TRỌNG: Cho phép kéo tất cả các lá bài bất kể lượt
+        // Logic kiểm tra lượt và điều kiện sẽ được thực hiện khi thả vào PlayCardZone
+        // Chỉ có exception duy nhất: khi exploding chỉ cho phép kéo Defuse
+        
         BeginDragEvent?.Invoke(this);
         Vector2 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         offset = mousePosition - (Vector2)transform.position;
@@ -226,16 +230,38 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
         SelectEvent?.Invoke(this, selected);
 
         if (selected)
+        {
             transform.localPosition += transform.up * selectionOffset;
+            Debug.Log($"Card {data.effect} SELECTED");
+        }
         else
+        {
             transform.localPosition = Vector3.zero;
+            Debug.Log($"Card {data.effect} DESELECTED");
+            
+            // Notify PlayCardZone to cleanup deselected cards
+            PlayCardZone playZone = FindObjectOfType<PlayCardZone>();
+            if (playZone != null)
+            {
+                playZone.ForceCleanupSelection();
+            }
+        }
     }
 
     public void Deselect()
     {
         if (!selected) return;
+        
+        Debug.Log($"Deselect: Card {data.effect} being deselected");
         selected = false;
         transform.localPosition = Vector3.zero;
+        
+        // Notify PlayCardZone to cleanup
+        PlayCardZone playZone = FindObjectOfType<PlayCardZone>();
+        if (playZone != null)
+        {
+            playZone.ForceCleanupSelection();
+        }
     }
 
     public int SiblingAmount()
@@ -254,30 +280,5 @@ public class Card : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHand
         int index = ParentIndex();
         int total = transform.parent.parent.childCount - 1;
         return Mathf.InverseLerp(0, total, index);
-    }
-
-    // Method để cập nhật visual state khi thẻ được chọn cho combo
-    public void UpdateComboSelectionVisual()
-    {
-        if (this == null || transform == null) return;
-        
-        if (selected)
-        {
-            // Thẻ được chọn - thay đổi màu hoặc scale
-            if (imageComponent != null)
-            {
-                imageComponent.color = Color.yellow; // Highlight màu vàng
-            }
-            transform.localScale = Vector3.one * 1.1f; // Scale lên 10%
-        }
-        else
-        {
-            // Thẻ không được chọn - reset về trạng thái bình thường
-            if (imageComponent != null)
-            {
-                imageComponent.color = Color.white;
-            }
-            transform.localScale = Vector3.one;
-        }
     }
 }

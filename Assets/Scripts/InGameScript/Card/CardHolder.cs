@@ -260,15 +260,15 @@ public class CardHolder : MonoBehaviour
         if (cardToRemove != null)
         {
             Cards.Remove(cardToRemove);
-            Destroy(cardToRemove.transform.parent.gameObject); // ⚠️ dùng parent mới đúng
-            Debug.Log("🗑️ Đã xoá lá bài: " + cardName);
+            Destroy(cardToRemove.transform.parent.gameObject);
+            Debug.Log("Đã xoá lá bài: " + cardName);
 
             ArrangeCards();
-            GameManager.Instance?.UpdatePlayerCardCount(); // ✅ cập nhật số bài
+            GameManager.Instance?.UpdatePlayerCardCount();
         }
         else
         {
-            Debug.LogWarning("⚠️ Không tìm thấy lá bài để xoá: " + cardName);
+            Debug.LogWarning("Không tìm thấy lá bài để xoá: " + cardName);
         }
     }
     
@@ -277,7 +277,7 @@ public class CardHolder : MonoBehaviour
         GameObject cardObj = Instantiate(cardPrefab);
         cardObj.transform.SetParent(transform, false);
 
-        Card cardComp = cardObj.GetComponentInChildren<Card>(); // 👈 giống như trong DrawCard
+        Card cardComp = cardObj.GetComponentInChildren<Card>();
 
         if (cardComp != null)
         {
@@ -289,13 +289,13 @@ public class CardHolder : MonoBehaviour
 
             RegisterCardEvents(cardComp);
             ArrangeCards();
-            GameManager.Instance?.UpdatePlayerCardCount(); // ✅ cập nhật số bài
+            GameManager.Instance?.UpdatePlayerCardCount();
 
-            Debug.Log("📥 Đã thêm lá bài: " + data.cardName);
+            Debug.Log("Đã thêm lá bài: " + data.cardName);
         }
         else
         {
-            Debug.LogError("❌ Không tìm thấy component Card trong prefab!");
+            Debug.LogError("Không tìm thấy component Card trong prefab!");
         }
     }
 }

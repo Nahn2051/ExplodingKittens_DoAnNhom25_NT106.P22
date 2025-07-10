@@ -1,61 +1,136 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Photon.Pun;
+using System.Linq;
 
-// Đảm bảo file này không có namespace để các file khác truy cập NopeManager trực tiếp
 public class NopeManager : MonoBehaviourPunCallbacks
 {
     public static NopeManager Instance;
-
-    // Trạng thái có thể đánh Nope
+    
+    // Nope System Variables
     public static bool IsCanPlayNope = false;
-    // Không cho phép Nope khi exploding
-    public static bool IsExploding = false;
-
-    // Stack lưu các effect đang bị Nope (để xử lý Nope vào Nope)
     private Stack<NopeEffectData> nopeStack = new Stack<NopeEffectData>();
-
+    
+    [Header("Nope UI")]
+    [SerializeField] public GameObject nopePopupPanel;
+    
     private void Awake()
     {
         if (Instance == null)
+        {
             Instance = this;
+        }
         else if (Instance != this)
+        {
             Destroy(gameObject);
+        }
     }
-
-    // Gọi khi bắt đầu 1 effect có thể bị Nope
+    
     public void StartNopeWindow(string effectType, object effectData)
     {
-        if (IsExploding) return;
+        Debug.Log($"StartNopeWindow called for {effectType}");
+        
+        if (CardEffectManager.IsExplodingInProgress) 
+        {
+            Debug.Log("Cannot start Nope window - exploding in progress");
+            return;
+        }
+        
+        if (effectType == "Attack" || effectType == "Skip")
+        {
+            IsCanPlayNope = true;
+            nopeStack.Push(new NopeEffectData(effectType, effectData));
+            Debug.Log($"Nope window opened for {effectType} - remains open until someone draws a card");
+            return;
+        }
+        
         IsCanPlayNope = true;
         nopeStack.Push(new NopeEffectData(effectType, effectData));
+        Debug.Log($"Nope window opened for {effectType} - 5 seconds to play Nope");
     }
 
-    // Gọi khi effect kết thúc hoặc có người rút bài
     public void EndNopeWindow()
     {
+        Debug.Log("EndNopeWindow called");
         IsCanPlayNope = false;
         nopeStack.Clear();
     }
-
-    // Gọi khi có người chơi đánh Nope
-    public void PlayNope(int playerId)
+    
+    public bool IsEffectNoped(string effectType, object effectData)
     {
-        if (!IsCanPlayNope || IsExploding) return;
+        // Nếu stack rỗng, không có gì bị Nope
+        if (nopeStack.Count == 0)
+        {
+            Debug.Log($"Effect {effectType} was NOT noped - empty stack");
+            return false;
+        }
+        
+        // Kiểm tra xem có effect với type này trong stack và effect cuối có phải là Nope không
+        bool hasOriginalEffect = false;
+        bool lastIsNope = false;
+        
+        foreach (var data in nopeStack)
+        {
+            if (data.effectType == effectType)
+            {
+                // So sánh data đơn giản
+                if ((effectData == null && data.effectData == null) ||
+                    (effectData != null && data.effectData != null && effectData.ToString() == data.effectData.ToString()))
+                {
+                    hasOriginalEffect = true;
+                }
+            }
+        }
+        
+        // Kiểm tra effect cuối cùng
+        var lastEffect = nopeStack.Peek();
+        lastIsNope = (lastEffect.effectType == "Nope");
+        
+        if (hasOriginalEffect && lastIsNope)
+        {
+            Debug.Log($"Effect {effectType} was NOPED!");
+            return true;
+        }
+        
+        Debug.Log($"Effect {effectType} was NOT noped - hasOriginalEffect: {hasOriginalEffect}, lastIsNope: {lastIsNope}");
+        return false;
+    }
+    
+    public bool HasNopedEffects()
+    {
+        return nopeStack.Count > 0 && nopeStack.Peek().effectType == "Nope";
+    }
+
+    public void PlayNopeCard(int playerId)
+    {
+        if (!IsCanPlayNope || CardEffectManager.IsExplodingInProgress) 
+        {
+            Debug.Log("Cannot play Nope - window closed or exploding in progress");
+            return;
+        }
+        
+        Debug.Log($"Player {playerId} played Nope!");
         photonView.RPC("RPC_ShowNopeEffect", RpcTarget.All, playerId);
         HandleNopeLogic(playerId);
     }
 
-    // Xử lý logic Nope (bao gồm Nope vào Nope)
     private void HandleNopeLogic(int nopePlayerId)
     {
-        if (nopeStack.Count == 0) return;
+        Debug.Log($"HandleNopeLogic: Player {nopePlayerId} played Nope, stack count: {nopeStack.Count}");
+        
+        if (nopeStack.Count == 0) 
+        {
+            Debug.LogWarning("HandleNopeLogic: No effects in stack to nope!");
+            return;
+        }
+        
         var lastEffect = nopeStack.Peek();
+        Debug.Log($"HandleNopeLogic: Last effect in stack: {lastEffect.effectType}");
 
-        // Nếu Nope vào Nope chính mình
         if (lastEffect.effectType == "Nope" && lastEffect.nopePlayerId == nopePlayerId)
         {
-            // Phục hồi effect trước đó
+            Debug.Log("HandleNopeLogic: Nope-ing own Nope - restoring previous effect");
             nopeStack.Pop();
             if (nopeStack.Count > 0)
             {
@@ -66,10 +141,9 @@ public class NopeManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        // Nếu Nope vào Nope của người khác
         if (lastEffect.effectType == "Nope" && lastEffect.nopePlayerId != nopePlayerId)
         {
-            // Hủy Nope trước đó, phục hồi effect bị Nope
+            Debug.Log("HandleNopeLogic: Nope-ing someone else's Nope - restoring original effect");
             nopeStack.Pop();
             if (nopeStack.Count > 0)
             {
@@ -80,15 +154,12 @@ public class NopeManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        // Nope vào effect thường
-        // Đẩy effect Nope vào stack
+        Debug.Log($"HandleNopeLogic: Nope-ing regular effect {lastEffect.effectType}");
         nopeStack.Push(new NopeEffectData("Nope", null, nopePlayerId));
-        // Vô hiệu hóa effect hiện tại
         CancelEffect(lastEffect);
         EndNopeWindow();
     }
 
-    // Hiển thị hiệu ứng Nope cho tất cả
     [PunRPC]
     private void RPC_ShowNopeEffect(int playerId)
     {
@@ -96,64 +167,405 @@ public class NopeManager : MonoBehaviourPunCallbacks
         ShowNopePopup();
     }
 
-    // Hiệu ứng pop-up Nope (Canvas tạm thời)
     private void ShowNopePopup()
     {
-        GameObject tempNope = new GameObject("NopePopup");
-        tempNope.transform.SetParent(transform);
-        Canvas canvas = tempNope.AddComponent<Canvas>();
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 2000;
-        CanvasGroup cg = tempNope.AddComponent<CanvasGroup>();
-        cg.alpha = 1f;
-        UnityEngine.UI.Image img = tempNope.AddComponent<UnityEngine.UI.Image>();
-        // Nếu có sprite Nope, gán vào đây, nếu không thì màu đỏ
-        img.color = Color.red;
-        RectTransform rect = tempNope.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(300, 150);
-        rect.anchorMin = new Vector2(0.5f, 0.5f);
-        rect.anchorMax = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = Vector2.zero;
-        // Text
-        GameObject textObj = new GameObject("NopeText");
-        textObj.transform.SetParent(tempNope.transform);
-        var text = textObj.AddComponent<TMPro.TextMeshProUGUI>();
-        text.text = "NOPE!";
-        text.fontSize = 60;
-        text.color = Color.white;
-        text.alignment = TMPro.TextAlignmentOptions.Center;
-        var textRect = textObj.GetComponent<RectTransform>();
-        textRect.sizeDelta = new Vector2(300, 150);
-        textRect.anchorMin = new Vector2(0.5f, 0.5f);
-        textRect.anchorMax = new Vector2(0.5f, 0.5f);
-        textRect.anchoredPosition = Vector2.zero;
-        // Tự hủy sau 0.5s
-        Destroy(tempNope, 0.5f);
+        if (nopePopupPanel != null)
+        {
+            // Hiển thị panel Nope
+            nopePopupPanel.SetActive(true);
+            
+            // Tự ẩn panel sau 0.5 giây
+            StartCoroutine(HideNopePopupAfterDelay(0.5f));
+        }
+        else
+        {
+            Debug.LogWarning("NopePopupPanel chưa được gán trong Inspector!");
+        }
+    }
+    
+    private System.Collections.IEnumerator HideNopePopupAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (nopePopupPanel != null)
+        {
+            nopePopupPanel.SetActive(false);
+        }
     }
 
-    // Hủy effect hiện tại khi bị Nope
+    // ==== CÁC HÀM BỔ SUNG ĐỂ XỬ LÝ EFFECT CANCELLATION/RESUMPTION ====
+    
+    public void CancelSkipEffect(int playerId)
+    {
+        Debug.Log($"Skip của player {playerId} bị Nope! (Skip đã kích hoạt - Nope không có tác dụng)");
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideEffect();
+        }
+    }
+    
+    public void ResumeSkipEffect(int playerId)
+    {
+        Debug.Log($"Skip của player {playerId} được phục hồi! (Skip đã kích hoạt - không cần phục hồi)");
+    }
+    
+    public void CancelAttackEffect(int playerId)
+    {
+        Debug.Log($"Attack của player {playerId} bị Nope! (Attack đã kích hoạt - Nope không có tác dụng)");
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideEffect();
+        }
+    }
+    
+    public void ResumeAttackEffect(int playerId)
+    {
+        Debug.Log($"Attack của player {playerId} được phục hồi! (Attack đã kích hoạt - không cần phục hồi)");
+    }
+    
+    public void CancelFavorEffect(int playerId)
+    {
+        Debug.Log($"Favor của player {playerId} bị Nope!");
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideEffect();
+        }
+        
+        if (FavorTargetSelectUI.Instance != null)
+        {
+            FavorTargetSelectUI.Instance.gameObject.SetActive(false);
+        }
+    }
+    
+    public void ResumeFavorEffect(int playerId)
+    {
+        Debug.Log($"Favor của player {playerId} được phục hồi!");
+    }
+    
+    public void CancelComboEffect(string comboKey)
+    {
+        Debug.Log($"Combo {comboKey} bị Nope!");
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideEffect();
+            CardEffectManager.Instance.HideAllComboPanels();
+        }
+    }
+    
+    public void ResumeComboEffect(string comboKey)
+    {
+        Debug.Log($"Combo {comboKey} được phục hồi!");
+    }
+    
+    public void CancelShuffleEffect(int playerId)
+    {
+        Debug.Log($"Shuffle của player {playerId} bị Nope!");
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideEffect();
+        }
+    }
+    
+    public void ResumeShuffleEffect(int playerId)
+    {
+        Debug.Log($"Shuffle của player {playerId} được phục hồi!");
+    }
+    
+    public void CancelSeeTheFutureEffect(int playerId)
+    {
+        Debug.Log($"SeeTheFuture của player {playerId} bị Nope!");
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideEffect();
+        }
+    }
+    
+    public void ResumeSeeTheFutureEffect(int playerId)
+    {
+        Debug.Log($"SeeTheFuture của player {playerId} được phục hồi!");
+    }
+
+    // Coroutines để xử lý Nope timing cho các effect
+    
+    public void StartFavorNopeWindow(int playerId)
+    {
+        StartNopeWindow("Favor", playerId);
+        StartCoroutine(ProcessFavorAfterNopeWindow(playerId));
+    }
+    
+    public void StartShuffleNopeWindow(int playerId)
+    {
+        StartNopeWindow("Shuffle", playerId);
+        StartCoroutine(ProcessShuffleAfterNopeWindow(playerId));
+    }
+    
+    public void StartSeeTheFutureNopeWindow(int playerId)
+    {
+        StartNopeWindow("SeeTheFuture", playerId);
+        StartCoroutine(ProcessSeeTheFutureAfterNopeWindow(playerId));
+    }
+    
+    public void StartComboNopeWindow(List<Card> comboCards, string comboKey)
+    {
+        StartNopeWindow("Combo", comboKey);
+        StartCoroutine(ProcessComboAfterNopeWindow(comboCards, comboKey));
+    }
+    
+    private IEnumerator ProcessFavorAfterNopeWindow(int playerId)
+    {
+        // Chờ 5 giây để người chơi có thể dùng Nope
+        yield return new WaitForSeconds(5f);
+        
+        // Kiểm tra xem effect có bị Nope hay không TRƯỚC khi kết thúc Nope window
+        bool wasNoped = IsEffectNoped("Favor", playerId);
+        EndNopeWindow();
+        
+        // CHỈ thực hiện effect nếu KHÔNG bị Nope
+        if (!wasNoped)
+        {
+            // Ẩn effect text sau khi hết thời gian Nope
+            if (CardEffectManager.Instance != null)
+            {
+                CardEffectManager.Instance.HideEffect();
+            }
+            
+            // Thực hiện effect nếu không bị Nope và là người chơi đúng
+            // Favor: Người chơi tiếp tục lượt sau khi nhận được bài
+            if (PhotonNetwork.LocalPlayer.ActorNumber == playerId)
+            {
+                if (FavorTargetSelectUI.Instance != null)
+                {
+                    FavorTargetSelectUI.Instance.Show(
+                        GameManager.Instance.playerList,
+                        PhotonNetwork.LocalPlayer.ActorNumber,
+                        (targetPlayerId) =>
+                        {
+                            Debug.Log("[Favor] Đã chọn người chơi có ID: " + targetPlayerId);
+                            CardEffectManager.Instance.photonView.RPC("RPC_RequestFavorCard", RpcTarget.All, playerId, targetPlayerId);
+                        }
+                    );
+                }
+            }
+        }
+        else
+        {
+            Debug.Log("[Favor] Effect was NOPED - not executing");
+            // Ẩn effect text ngay khi bị Nope
+            if (CardEffectManager.Instance != null)
+            {
+                CardEffectManager.Instance.HideEffect();
+            }
+        }
+        
+        // Force reset UI state
+        yield return new WaitForSeconds(0.2f);
+        ForceResetUIState();
+        
+        Debug.Log("Favor process completed - UI should be interactive again");
+    }
+    
+    private IEnumerator ProcessShuffleAfterNopeWindow(int playerId)
+    {
+        // Chờ 5 giây để người chơi có thể dùng Nope
+        yield return new WaitForSeconds(5f);
+        
+        // Kiểm tra xem effect có bị Nope hay không TRƯỚC khi kết thúc Nope window
+        bool wasNoped = IsEffectNoped("Shuffle", playerId);
+        EndNopeWindow();
+        
+        // CHỈ thực hiện effect nếu KHÔNG bị Nope
+        if (!wasNoped)
+        {
+            // Ẩn effect text sau khi hết thời gian Nope
+            if (CardEffectManager.Instance != null)
+            {
+                CardEffectManager.Instance.HideEffect();
+            }
+            
+            // Thực hiện effect nếu không bị Nope
+            // Shuffle: Người chơi tiếp tục lượt sau khi shuffle
+            CardManager.Instance.PhotonView.RPC("RPC_RequestShuffle", RpcTarget.MasterClient);
+            Debug.Log("Shuffle completed - player continues their turn");
+        }
+        else
+        {
+            Debug.Log("[Shuffle] Effect was NOPED - not executing");
+            // Ẩn effect text ngay khi bị Nope
+            if (CardEffectManager.Instance != null)
+            {
+                CardEffectManager.Instance.HideEffect();
+            }
+        }
+        
+        // Force reset UI state
+        yield return new WaitForSeconds(0.2f);
+        ForceResetUIState();
+        
+        Debug.Log("Shuffle process completed - UI should be interactive again");
+    }
+    
+    private IEnumerator ProcessSeeTheFutureAfterNopeWindow(int playerId)
+    {
+        // Chờ 5 giây để người chơi có thể dùng Nope
+        yield return new WaitForSeconds(5f);
+        
+        // Kiểm tra xem effect có bị Nope hay không TRƯỚC khi kết thúc Nope window
+        bool wasNoped = IsEffectNoped("SeeTheFuture", playerId);
+        EndNopeWindow();
+        Debug.Log("SeeTheFuture: Nope window ended");
+        
+        // CHỈ thực hiện effect nếu KHÔNG bị Nope
+        if (!wasNoped)
+        {
+            // Ẩn effect text sau khi hết thời gian Nope
+            if (CardEffectManager.Instance != null)
+            {
+                CardEffectManager.Instance.HideEffect();
+            }
+            
+            // Thực hiện effect nếu không bị Nope
+            if (CardManager.Instance != null)
+            {
+                Debug.Log("Processing SeeTheFuture effect - showing top 3 cards");
+                // Request master client to show cards
+                CardManager.Instance.PhotonView.RPC("RPC_RequestSeeTheFuture", RpcTarget.MasterClient, playerId);
+                
+                // SeeTheFuture KHÔNG kết thúc lượt - người chơi tiếp tục lượt và có thể chơi thêm bài hoặc rút bài
+                // Lượt chỉ kết thúc khi người chơi rút bài (draw card)
+                Debug.Log("SeeTheFuture completed - player continues their turn");
+            }
+        }
+        else
+        {
+            Debug.Log("[SeeTheFuture] Effect was NOPED - not executing");
+            // Ẩn effect text ngay khi bị Nope
+            if (CardEffectManager.Instance != null)
+            {
+                CardEffectManager.Instance.HideEffect();
+            }
+        }
+        
+        // Chờ một chút để SeeTheFuture UI hiển thị hoàn thành
+        yield return new WaitForSeconds(0.5f);
+        
+        // Force reset UI state để đảm bảo không bị đứng
+        ForceResetUIState();
+        
+        // Đảm bảo UI hoàn toàn được reset và người chơi có thể tương tác tiếp
+        yield return new WaitForSeconds(0.1f);
+        Debug.Log("SeeTheFuture process completed - UI should be interactive again");
+    }
+    
+    private IEnumerator ProcessComboAfterNopeWindow(List<Card> comboCards, string comboKey)
+    {
+        // Chờ 5 giây để người chơi có thể dùng Nope
+        yield return new WaitForSeconds(5f);
+        
+        // Kiểm tra xem effect có bị Nope hay không TRƯỚC khi kết thúc Nope window
+        bool wasNoped = IsEffectNoped("Combo", comboKey);
+        EndNopeWindow();
+        
+        // CHỈ thực hiện effect nếu KHÔNG bị Nope
+        if (!wasNoped)
+        {
+            // Ẩn effect text sau khi hết thời gian Nope
+            if (CardEffectManager.Instance != null)
+            {
+                CardEffectManager.Instance.HideEffect();
+            }
+            
+            // Thực hiện combo effect nếu không bị Nope
+            // Combo: Người chơi tiếp tục lượt sau khi nhận được bài từ combo
+            if (CardEffectManager.Instance != null)
+            {
+                CardEffectManager.Instance.ExecuteCombo(comboCards);
+            }
+            Debug.Log("Combo completed - player continues their turn");
+        }
+        else
+        {
+            Debug.Log("[Combo] Effect was NOPED - not executing");
+            // Ẩn effect text ngay khi bị Nope
+            if (CardEffectManager.Instance != null)
+            {
+                CardEffectManager.Instance.HideEffect();
+            }
+        }
+        
+        // Force reset UI state
+        yield return new WaitForSeconds(0.2f);
+        ForceResetUIState();
+        
+        Debug.Log("Combo process completed - UI should be interactive again");
+    }
+
+    // Method để force reset UI state khi có vấn đề UI bị đứng
+    private void ForceResetUIState()
+    {
+        Debug.Log("NopeManager.ForceResetUIState: Resetting all UI states");
+        
+        // Reset Nope state
+        EndNopeWindow();
+        
+        // Reset effect text
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideEffect();
+        }
+        
+        // Đảm bảo tất cả UI panels được reset
+        if (CardEffectManager.Instance != null)
+        {
+            CardEffectManager.Instance.HideAllComboPanels();
+            CardEffectManager.Instance.HideExplodingPanels();
+        }
+        
+        // Reset SeeTheFuture UI nếu có
+        if (SeeTheFutureUI.Instance != null)
+        {
+            SeeTheFutureUI.Instance.gameObject.SetActive(false);
+        }
+        
+        // Reset Favor UI nếu có
+        if (FavorTargetSelectUI.Instance != null)
+        {
+            FavorTargetSelectUI.Instance.gameObject.SetActive(false);
+        }
+        
+        // Đảm bảo NopeManager được reset
+        IsCanPlayNope = false;
+        
+        Debug.Log("NopeManager.ForceResetUIState completed");
+    }
+
+    public void OnPlayerDrawCard()
+    {
+        Debug.Log("Someone drew a card - ending Nope window");
+        EndNopeWindow();
+    }
+
     private void CancelEffect(NopeEffectData effect)
     {
         Debug.Log($"Effect {effect.effectType} bị Nope!");
+        
         switch (effect.effectType)
         {
             case "Skip":
-                CardEffectManager.Instance?.CancelSkipEffect((int)effect.effectData);
+                CancelSkipEffect((int)effect.effectData);
                 break;
             case "Attack":
-                CardEffectManager.Instance?.CancelAttackEffect((int)effect.effectData);
+                CancelAttackEffect((int)effect.effectData);
                 break;
             case "Favor":
-                CardEffectManager.Instance?.CancelFavorEffect((int)effect.effectData);
+                CancelFavorEffect((int)effect.effectData);
                 break;
             case "Combo":
-                CardEffectManager.Instance?.CancelComboEffect(effect.effectData);
+                CancelComboEffect((string)effect.effectData);
                 break;
             case "Shuffle":
-                CardEffectManager.Instance?.CancelShuffleEffect((int)effect.effectData);
+                CancelShuffleEffect((int)effect.effectData);
                 break;
             case "SeeTheFuture":
-                CardEffectManager.Instance?.CancelSeeTheFutureEffect((int)effect.effectData);
+                CancelSeeTheFutureEffect((int)effect.effectData);
                 break;
             default:
                 Debug.LogWarning($"Không xác định loại effect để Cancel: {effect.effectType}");
@@ -161,29 +573,29 @@ public class NopeManager : MonoBehaviourPunCallbacks
         }
     }
 
-    // Phục hồi effect bị Nope nếu Nope vào Nope chính mình
     private void ResumeEffect(NopeEffectData effect)
     {
         Debug.Log($"Effect {effect.effectType} được phục hồi do Nope vào Nope chính mình!");
+        
         switch (effect.effectType)
         {
             case "Skip":
-                CardEffectManager.Instance?.ResumeSkipEffect((int)effect.effectData);
+                ResumeSkipEffect((int)effect.effectData);
                 break;
             case "Attack":
-                CardEffectManager.Instance?.ResumeAttackEffect((int)effect.effectData);
+                ResumeAttackEffect((int)effect.effectData);
                 break;
             case "Favor":
-                CardEffectManager.Instance?.ResumeFavorEffect((int)effect.effectData);
+                ResumeFavorEffect((int)effect.effectData);
                 break;
             case "Combo":
-                CardEffectManager.Instance?.ResumeComboEffect(effect.effectData);
+                ResumeComboEffect((string)effect.effectData);
                 break;
             case "Shuffle":
-                CardEffectManager.Instance?.ResumeShuffleEffect((int)effect.effectData);
+                ResumeShuffleEffect((int)effect.effectData);
                 break;
             case "SeeTheFuture":
-                CardEffectManager.Instance?.ResumeSeeTheFutureEffect((int)effect.effectData);
+                ResumeSeeTheFutureEffect((int)effect.effectData);
                 break;
             default:
                 Debug.LogWarning($"Không xác định loại effect để Resume: {effect.effectType}");
@@ -191,18 +603,13 @@ public class NopeManager : MonoBehaviourPunCallbacks
         }
     }
 
-    // Gọi khi có người rút bài (reset trạng thái Nope)
-    public void OnPlayerDrawCard()
-    {
-        EndNopeWindow();
-    }
-
-    // Dữ liệu effect bị Nope
-    private class NopeEffectData
+    [System.Serializable]
+    public class NopeEffectData
     {
         public string effectType;
         public object effectData;
-        public int nopePlayerId; // Nếu là Nope thì lưu ai là người Nope
+        public int nopePlayerId;
+        
         public NopeEffectData(string type, object data, int nopePlayerId = -1)
         {
             this.effectType = type;
@@ -210,4 +617,4 @@ public class NopeManager : MonoBehaviourPunCallbacks
             this.nopePlayerId = nopePlayerId;
         }
     }
-} 
+}
