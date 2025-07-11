@@ -204,10 +204,9 @@ public class FirebaseLoginManager : MonoBehaviour
                         {
                             Debug.LogWarning("⚠️ Không có dữ liệu người dùng trên database!");
                         }
-
-                        // Load Main Menu sau khi đã tải xong
-                        SceneManager.LoadScene("Main Menu");
                     });
+                    // Load Main Menu sau khi đã tải xong
+                    SceneManager.LoadScene("Main Menu");
                 }
             });
         });
