@@ -169,6 +169,13 @@ public class GameManager : MonoBehaviourPunCallbacks
     
     public void OnDrawCardButtonClicked()
     {
+        // QUAN TRỌNG: Không cho phép rút bài khi có exploding sequence đang diễn ra
+        if (CardEffectManager.IsExplodingInProgress)
+        {
+            Debug.LogWarning("Cannot draw card - exploding sequence in progress!");
+            return;
+        }
+        
         if (IsLocalPlayerTurn())
         {
             Debug.Log("Đang rút bài và chuyển lượt...");
@@ -205,6 +212,13 @@ public class GameManager : MonoBehaviourPunCallbacks
         
         // Giảm thời gian chờ từ 0.5s xuống 0.1s
         yield return new WaitForSeconds(0.1f);
+
+        // QUAN TRỌNG: Không chuyển lượt nếu exploding sequence đang diễn ra
+        if (CardEffectManager.IsExplodingInProgress)
+        {
+            Debug.Log("Exploding sequence in progress - not changing turn");
+            yield break;
+        }
 
         attackTurns--; // Giảm số lượt tấn công còn lại
 
@@ -700,11 +714,11 @@ public class GameManager : MonoBehaviourPunCallbacks
         isRestoringUI = true;
         Debug.Log("Explicitly enabling player interactions");
         
-        // Re-enable drawing cards if it's the player's turn
+        // Re-enable drawing cards if it's the player's turn AND no exploding is in progress
         bool isLocalTurn = IsLocalPlayerTurn();
         if (drawCardButtonComponent != null)
         {
-            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress;
+            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress && !CardEffectManager.IsExplodingInProgress;
         }
         
         // IMPORTANT: Always enable card interactions for the local player
@@ -764,11 +778,11 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("Enabling UI interactions only (keeping active dialogs open)");
         
-        // Re-enable drawing cards if it's the player's turn
+        // Re-enable drawing cards if it's the player's turn AND no exploding is in progress
         bool isLocalTurn = IsLocalPlayerTurn();
         if (drawCardButtonComponent != null)
         {
-            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress;
+            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress && !CardEffectManager.IsExplodingInProgress;
         }
         
         // If this is the local player's turn, make sure their cards are interactive

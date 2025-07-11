@@ -26,6 +26,9 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     private Coroutine backupEliminationCoroutine = null;
     private Coroutine finalSafetyEliminationCoroutine = null;
     
+    // Store the exploding player ID before it gets reset to handle turn transitions correctly
+    private int explodingPlayerIdForTurnTransition = -1;
+    
     private void Awake()
     {
         if (Instance == null)
@@ -110,6 +113,9 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"OnDefuseConfirmed called with position {position}");
         
+        // Lưu lại ExplodingPlayerId trước khi nó bị reset để sử dụng trong việc chuyển lượt
+        explodingPlayerIdForTurnTransition = ExplodingPlayerId;
+        
         // Cancel any active backup elimination timers immediately
         CancelBackupEliminationTimers();
         
@@ -121,6 +127,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         // (trạng thái exploding sẽ được reset bởi RPC_EndExplodingState)
         if (PhotonNetwork.IsMasterClient)
         {
+            // Đây là thời điểm tốt để chuyển lượt vì exploding state chưa bị reset
             StartCoroutine(ResumeTurnAfterDelay(0.3f));
         }
     }
@@ -165,18 +172,44 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         // Chỉ master client xử lý việc chuyển lượt sau khi defuse
         if (PhotonNetwork.IsMasterClient && GameManager.Instance != null)
         {
-            // Đảm bảo exploding state đã được reset trước khi chuyển lượt
             Debug.Log("Master client resuming turn after defuse");
             
             // Sau khi defuse thành công, lượt chơi phải chuyển sang người chơi tiếp theo
             // Theo luật Exploding Kittens: nếu rút được Exploding Kitten và defuse thành công, lượt kết thúc
-            int currentTurn = GameManager.Instance.GetCurrentTurnIndex();
-            int nextPlayer = GameManager.Instance.GetNextAlivePlayerIndex(currentTurn);
             
-            Debug.Log($"Defuse successful: Turn passing from player index {currentTurn} to player index {nextPlayer}");
+            // Tìm index của người chơi đã rút exploding card trong playerList
+            int explodingPlayerIndex = -1;
+            if (explodingPlayerIdForTurnTransition > 0)
+            {
+                for (int i = 0; i < GameManager.Instance.playerList.Count; i++)
+                {
+                    if (GameManager.Instance.playerList[i].ActorNumber == explodingPlayerIdForTurnTransition)
+                    {
+                        explodingPlayerIndex = i;
+                        break;
+                    }
+                }
+            }
+            
+            // Nếu không tìm thấy exploding player, sử dụng current turn index làm fallback
+            int currentPlayerIndex = (explodingPlayerIndex >= 0) ? explodingPlayerIndex : GameManager.Instance.GetCurrentTurnIndex();
+            int nextPlayerIndex = GameManager.Instance.GetNextAlivePlayerIndex(currentPlayerIndex);
+            
+            Debug.Log($"Defuse successful: explodingPlayerIdForTurnTransition={explodingPlayerIdForTurnTransition}, explodingPlayerIndex={explodingPlayerIndex}, turn passing from player index {currentPlayerIndex} to player index {nextPlayerIndex}");
+            
+            // Đảm bảo rằng next player không phải là chính player đã defuse (trừ khi chỉ có 1 player còn lại)
+            if (nextPlayerIndex == currentPlayerIndex && GameManager.Instance.playerList.Count > 1)
+            {
+                Debug.LogWarning("Next player is same as current player, this shouldn't happen unless only 1 player remains");
+                // Thử tìm next player khác một lần nữa
+                nextPlayerIndex = GameManager.Instance.GetNextAlivePlayerIndex(nextPlayerIndex);
+            }
+            
+            // Reset transition tracking variable
+            explodingPlayerIdForTurnTransition = -1;
             
             // Chuyển lượt với 1 turn bình thường (không còn attack turns)
-            GameManager.Instance.StartTurn(nextPlayer, 1);
+            GameManager.Instance.StartTurn(nextPlayerIndex, 1);
         }
         else
         {
@@ -196,15 +229,150 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     private void RPC_ReturnToMainMenu()
     {
         Debug.Log("Leaving room and returning to main menu");
-        
-        // Clean up and disconnect
-        if (PhotonNetwork.IsConnected)
+        StartCoroutine(LeaveRoomAndReturnToMenu());
+    }
+    
+    private IEnumerator LeaveRoomAndReturnToMenu()
+    {
+        // Disable all UI interactions during disconnect process
+        if (GameManager.Instance != null)
         {
-            // Leave the room but stay connected
-            PhotonNetwork.LeaveRoom();
+            GameManager.Instance.enabled = false;
         }
         
+        // Clean up local state first
+        CleanupGameState();
+        
+        // Leave the room properly
+        if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom)
+        {
+            Debug.Log("Leaving Photon room...");
+            PhotonNetwork.LeaveRoom();
+            
+            // Wait for room leave confirmation
+            float timeout = 5f;
+            float timer = 0f;
+            
+            while (PhotonNetwork.InRoom && timer < timeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                timer += 0.1f;
+            }
+            
+            if (PhotonNetwork.InRoom)
+            {
+                Debug.LogWarning("Failed to leave room within timeout, forcing disconnect");
+                PhotonNetwork.Disconnect();
+                
+                // Wait for disconnect
+                timer = 0f;
+                while (PhotonNetwork.IsConnected && timer < timeout)
+                {
+                    yield return new WaitForSeconds(0.1f);
+                    timer += 0.1f;
+                }
+            }
+            else
+            {
+                Debug.Log("Successfully left Photon room");
+            }
+        }
+        else if (PhotonNetwork.IsConnected)
+        {
+            Debug.Log("Not in room, disconnecting from Photon...");
+            PhotonNetwork.Disconnect();
+            
+            // Wait for disconnect
+            float timeout = 3f;
+            float timer = 0f;
+            while (PhotonNetwork.IsConnected && timer < timeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                timer += 0.1f;
+            }
+        }
+        
+        Debug.Log("Photon cleanup completed, loading main menu scene");
+        
         // Load the main menu scene
+        SceneManager.LoadScene("Main Menu");
+    }
+    
+    private void CleanupGameState()
+    {
+        Debug.Log("Cleaning up game state before leaving room");
+        
+        // Reset exploding state
+        SetExplodingState(false);
+        
+        // Stop all running coroutines
+        StopAllCoroutines();
+        
+        // Hide all UI panels
+        HideAllComboPanels();
+        HideExplodingPanels();
+        
+        // Reset UI states
+        if (SeeTheFutureUI.Instance != null)
+        {
+            SeeTheFutureUI.Instance.gameObject.SetActive(false);
+        }
+        
+        if (FavorTargetSelectUI.Instance != null)
+        {
+            FavorTargetSelectUI.Instance.gameObject.SetActive(false);
+        }
+        
+        if (FavorGiveCardUI.Instance != null)
+        {
+            FavorGiveCardUI.Instance.gameObject.SetActive(false);
+        }
+        
+        // Clear card holder
+        if (CardHolder.Instance != null)
+        {
+            // Remove all cards from hand
+            var cards = CardHolder.Instance.Cards.ToList();
+            foreach (var card in cards)
+            {
+                CardHolder.Instance.RemoveCard(card);
+            }
+        }
+        
+        Debug.Log("Game state cleanup completed");
+    }
+    
+    // Public method to leave room (can be called from UI buttons)
+    public void LeaveRoomImmediate()
+    {
+        Debug.Log("Immediate room leave requested");
+        OnReturnToMainMenu();
+    }
+    
+    // Method to force leave room without waiting for UI confirmation
+    public void ForceLeaveRoom()
+    {
+        Debug.Log("Force leaving room immediately");
+        StartCoroutine(ForceLeaveRoomCoroutine());
+    }
+    
+    private IEnumerator ForceLeaveRoomCoroutine()
+    {
+        // Immediate cleanup
+        CleanupGameState();
+        
+        // Force disconnect without waiting
+        if (PhotonNetwork.IsConnected)
+        {
+            Debug.Log("Force disconnecting from Photon");
+            PhotonNetwork.Disconnect();
+            
+            // Short wait for disconnect
+            yield return new WaitForSeconds(1f);
+        }
+        
+        // Load main menu immediately
+        Debug.Log("Force loading main menu scene");
         SceneManager.LoadScene("JoinScene");
     }
     
@@ -512,6 +680,10 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     
     public void OnDefuseCardDropped(Card defuseCard)
     {
+        // QUAN TRỌNG: Ngay lập tức hủy các timer backup elimination khi defuse card được thả
+        Debug.Log("[CardEffectManager] Defuse card dropped - canceling elimination timers immediately");
+        CancelBackupEliminationTimers();
+        
         // Delegate to ExplodingKittenUI
         if (explodingKittenUI != null)
         {
@@ -622,7 +794,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         }
     }
 
-    // Direct fallback method to show FavorGiveUI without relying on RPC
+    // Direct fallback method to show FavorGiveCardUI without relying on RPC
     private IEnumerator DirectShowFavorGiveUI(int fromPlayerId, int targetPlayerId)
     {
         yield return new WaitForSeconds(0.1f); // Small delay to let RPC process first
@@ -1089,6 +1261,8 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         else
         {
             ExplodingPlayerId = -1;
+            // KHÔNG reset transition tracking variable ở đây vì ResumeTurnAfterDelay cần sử dụng nó
+            // explodingPlayerIdForTurnTransition sẽ được reset trong ResumeTurnAfterDelay sau khi sử dụng
         }
         
         Debug.Log($"[EXPLODING STATE] Changed from {previousState} to IsExplodingInProgress={IsExplodingInProgress}, ExplodingPlayerId={ExplodingPlayerId}");
@@ -1213,7 +1387,7 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     }
 
     // Method to cancel backup elimination timers when defuse is successful
-    private void CancelBackupEliminationTimers()
+    public void CancelBackupEliminationTimers()
     {
         if (backupEliminationCoroutine != null)
         {
@@ -1268,5 +1442,115 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         }
         
         Debug.Log("=== END FAVOR UI DEBUG ===");
+    }
+
+    // Method to handle unexpected disconnection
+    public override void OnDisconnected(Photon.Realtime.DisconnectCause cause)
+    {
+        Debug.Log($"Disconnected from Photon. Cause: {cause}");
+        
+        // Cleanup and return to main menu
+        CleanupGameState();
+        
+        // Load main menu scene after brief delay
+        StartCoroutine(ReturnToMainMenuAfterDisconnect());
+    }
+    
+    private IEnumerator ReturnToMainMenuAfterDisconnect()
+    {
+        yield return new WaitForSeconds(0.5f);
+        
+        Debug.Log("Returning to main menu after disconnect");
+        SceneManager.LoadScene("JoinScene");
+    }
+    
+    // Method to handle room leaving events
+    public override void OnLeftRoom()
+    {
+        Debug.Log("Successfully left Photon room");
+        // This will be called when we successfully leave the room
+        // The coroutine in RPC_ReturnToMainMenu will handle the scene loading
+    }
+    
+    // Method to handle when other players leave the room
+    public override void OnPlayerLeftRoom(Photon.Realtime.Player otherPlayer)
+    {
+        Debug.Log($"Player {otherPlayer.NickName} left the room");
+        
+        // You can add additional logic here if needed
+        // For example, check if we should end the game due to insufficient players
+        if (PhotonNetwork.PlayerList.Length < 2 && GameManager.Instance != null)
+        {
+            Debug.Log("Not enough players remaining, considering ending game");
+            // Could show a UI asking if player wants to continue waiting or leave
+        }
+    }
+    
+    // Debug method to check connection status
+    [ContextMenu("Debug Photon Connection")]
+    public void DebugPhotonConnection()
+    {
+        Debug.Log("=== PHOTON CONNECTION DEBUG ===");
+        Debug.Log($"IsConnected: {PhotonNetwork.IsConnected}");
+        Debug.Log($"InRoom: {PhotonNetwork.InRoom}");
+        Debug.Log($"Room Name: {(PhotonNetwork.CurrentRoom != null ? PhotonNetwork.CurrentRoom.Name : "null")}");
+        Debug.Log($"Player Count: {PhotonNetwork.PlayerList.Length}");
+        Debug.Log($"Local Player: {PhotonNetwork.LocalPlayer?.NickName ?? "null"}");
+        Debug.Log($"Is Master Client: {PhotonNetwork.IsMasterClient}");
+        Debug.Log("===============================");
+    }
+
+    // Static method to leave room from anywhere in the game
+    public static void RequestLeaveRoom()
+    {
+        if (Instance != null)
+        {
+            Debug.Log("Static request to leave room");
+            Instance.LeaveRoomImmediate();
+        }
+        else
+        {
+            Debug.LogWarning("CardEffectManager instance not found, using direct PhotonNetwork disconnect");
+            if (PhotonNetwork.IsConnected)
+            {
+                PhotonNetwork.Disconnect();
+            }
+            SceneManager.LoadScene("JoinScene");
+        }
+    }
+    
+    // Method to check if it's safe to leave room (no important operations in progress)
+    public bool CanSafelyLeaveRoom()
+    {
+        // Don't leave during exploding sequence
+        if (IsExplodingInProgress)
+        {
+            Debug.Log("Cannot leave room safely - exploding sequence in progress");
+            return false;
+        }
+        
+        // Don't leave if other critical operations are running
+        if (backupEliminationCoroutine != null || finalSafetyEliminationCoroutine != null)
+        {
+            Debug.Log("Cannot leave room safely - elimination timers running");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    // Method to leave room with safety check
+    public void LeaveRoomSafely()
+    {
+        if (CanSafelyLeaveRoom())
+        {
+            Debug.Log("Safe to leave room, proceeding with normal leave");
+            LeaveRoomImmediate();
+        }
+        else
+        {
+            Debug.LogWarning("Not safe to leave room immediately, forcing leave");
+            ForceLeaveRoom();
+        }
     }
 }

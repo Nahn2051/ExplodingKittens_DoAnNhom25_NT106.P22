@@ -39,6 +39,17 @@ public class ExplodingKittenUI : MonoBehaviour
     {
         Debug.Log("Starting exploding kitten sequence!");
         
+        // Reset trạng thái trước khi bắt đầu
+        hasDefuseInZone = false;
+        
+        // Dừng mọi countdown đang chạy trước đó
+        if (countdownCoroutine != null)
+        {
+            StopCoroutine(countdownCoroutine);
+            countdownCoroutine = null;
+            Debug.Log("Stopped previous countdown before starting new sequence");
+        }
+        
         // Hiển thị panel exploding kitten
         if (explodingKittenPanel != null)
         {
@@ -75,14 +86,10 @@ public class ExplodingKittenUI : MonoBehaviour
         {
             Debug.LogError("defuseZone is null!");
         }
-            
-        // Reset trạng thái
-        hasDefuseInZone = false;
         
         // Bắt đầu countdown 10 giây
-        if (countdownCoroutine != null)
-            StopCoroutine(countdownCoroutine);
         countdownCoroutine = StartCoroutine(CountdownTimer(10f));
+        Debug.Log("Started new 10-second countdown");
     }
     
     private IEnumerator CountdownTimer(float duration)
@@ -105,13 +112,20 @@ public class ExplodingKittenUI : MonoBehaviour
             timeRemaining -= 0.1f;
         }
         
+        // Kiểm tra lại hasDefuseInZone trước khi eliminate - đây là double check cuối cùng
+        if (hasDefuseInZone)
+        {
+            Debug.Log("[ExplodingKittenUI] Defuse was used during final check, player survives");
+            yield break;
+        }
+        
         // Hết thời gian
         if (countdownText != null)
             countdownText.text = "0s";
             
         Debug.Log($"[ExplodingKittenUI] Countdown finished. hasDefuseInZone: {hasDefuseInZone}");
         
-        // Kiểm tra có defuse không
+        // Kiểm tra có defuse không - chỉ eliminate nếu thực sự không có defuse
         if (!hasDefuseInZone)
         {
             // Không có defuse -> player bị loại
@@ -152,6 +166,8 @@ public class ExplodingKittenUI : MonoBehaviour
         if (defuseCard.data.effect == "Defuse")
         {
             Debug.Log($"[ExplodingKittenUI] Defuse card {defuseCard.data.cardName} dropped in zone");
+            
+            // Đặt hasDefuseInZone TRƯỚC KHI dừng countdown để tránh race condition
             hasDefuseInZone = true;
             
             // Dừng countdown ngay lập tức
@@ -159,7 +175,7 @@ public class ExplodingKittenUI : MonoBehaviour
             {
                 StopCoroutine(countdownCoroutine);
                 countdownCoroutine = null;
-                Debug.Log("[ExplodingKittenUI] Countdown stopped");
+                Debug.Log("[ExplodingKittenUI] Countdown stopped - defuse successful");
             }
             
             // Double-check để đảm bảo card được xóa khỏi CardHolder (fallback protection)
@@ -231,6 +247,14 @@ public class ExplodingKittenUI : MonoBehaviour
     
     public void HideExplodingPanel()
     {
+        // Dừng countdown nếu đang chạy
+        if (countdownCoroutine != null)
+        {
+            StopCoroutine(countdownCoroutine);
+            countdownCoroutine = null;
+            Debug.Log("[ExplodingKittenUI] Countdown stopped due to panel hide");
+        }
+        
         if (explodingKittenPanel != null)
             explodingKittenPanel.SetActive(false);
     }
@@ -238,7 +262,15 @@ public class ExplodingKittenUI : MonoBehaviour
     public void HidePositionInputPanel()
     {
         if (positionInputPanel != null)
+        {
             positionInputPanel.SetActive(false);
+            
+            // Clear input field khi ẩn panel
+            if (positionInputField != null)
+            {
+                positionInputField.text = "";
+            }
+        }
     }
     
     // Force elimination method for when automatic elimination fails
