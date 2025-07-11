@@ -123,13 +123,9 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         // RPC_ReinsertExplodingCard sẽ gọi RPC_EndExplodingState để reset trạng thái cho tất cả client
         photonView.RPC("RPC_ReinsertExplodingCard", RpcTarget.MasterClient, position);
         
-        // Chỉ chuyển lượt nếu là MasterClient
-        // (trạng thái exploding sẽ được reset bởi RPC_EndExplodingState)
-        if (PhotonNetwork.IsMasterClient)
-        {
-            // Đây là thời điểm tốt để chuyển lượt vì exploding state chưa bị reset
-            StartCoroutine(ResumeTurnAfterDelay(0.3f));
-        }
+        // QUAN TRỌNG: KHÔNG gọi ResumeTurnAfterDelay ở đây nữa
+        // Turn management sẽ được xử lý bởi ExplodingKittenUI.ProcessTurnAfterPositionInput
+        Debug.Log("OnDefuseConfirmed completed - turn management will be handled by ExplodingKittenUI");
     }
     
     private void OnRestartGame()
@@ -209,20 +205,36 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             explodingPlayerIdForTurnTransition = -1;
             
             // Chuyển lượt với 1 turn bình thường (không còn attack turns)
+            // Sau khi exploding được defuse, turn hiện tại kết thúc và chuyển sang người tiếp theo
             GameManager.Instance.StartTurn(nextPlayerIndex, 1);
+            
+            // Đảm bảo UI được khôi phục sau khi chuyển turn
+            yield return new WaitForSeconds(0.2f);
+            if (GameManager.Instance != null)
+            {
+                Debug.Log("Ensuring UI interactions are enabled after turn change");
+                GameManager.Instance.EnablePlayerInteractions();
+            }
         }
         else
         {
             Debug.Log("Non-master client waiting for turn change from master");
+            
+            // Thêm safety check cho non-master clients
+            yield return new WaitForSeconds(1.0f);
+            if (GameManager.Instance != null && !IsExplodingInProgress)
+            {
+                Debug.Log("Non-master client safety check - enabling UI interactions");
+                GameManager.Instance.EnablePlayerInteractions();
+            }
         }
     }
     
     private void OnReturnToMainMenu()
     {
         Debug.Log("Returning to main menu...");
-        
-        // Notify all clients to leave room
-        photonView.RPC("RPC_ReturnToMainMenu", RpcTarget.All);
+
+        StartCoroutine(LeaveRoomAndReturnToMenu());
     }
     
     [PunRPC]
@@ -562,11 +574,20 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         }
     }
     
-    // Các hàm xử lý hiệu ứng
+    // Các hàn xử lý hiệu ứng
     private void HandleExplodingEffect(int playerId)
     {
         Debug.Log($"HandleExplodingEffect called for player {playerId}");
         Debug.Log($"Local player ActorNumber: {PhotonNetwork.LocalPlayer.ActorNumber}");
+        Debug.Log($"Current exploding state: IsExplodingInProgress={IsExplodingInProgress}, ExplodingPlayerId={ExplodingPlayerId}");
+        
+        // Kiểm tra xem có exploding sequence nào khác đang diễn ra không
+        if (IsExplodingInProgress && ExplodingPlayerId != playerId)
+        {
+            Debug.LogWarning($"Another exploding sequence is already in progress for player {ExplodingPlayerId}. Queueing exploding for player {playerId}");
+            // Có thể thêm queue logic ở đây nếu cần
+            return;
+        }
         
         // Đặt trạng thái exploding đang diễn ra cho toàn bộ game
         SetExplodingState(true, playerId);
@@ -652,11 +673,14 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         {
             Debug.LogError($"FINAL SAFETY ELIMINATION: Player took more than {timeLimit} seconds to defuse - forcing elimination immediately!");
             
-            // Reset exploding state first
-            SetExplodingState(false);
+            // Lưu lại player ID trước khi reset state
+            int playerToEliminate = ExplodingPlayerId > 0 ? ExplodingPlayerId : PhotonNetwork.LocalPlayer.ActorNumber;
             
-            // Force eliminate the player who was supposed to be exploding
-            int playerToEliminate = PhotonNetwork.LocalPlayer.ActorNumber;
+            // Reset exploding state chỉ nếu là local player đang exploding
+            if (ExplodingPlayerId == PhotonNetwork.LocalPlayer.ActorNumber)
+            {
+                SetExplodingState(false);
+            }
             
             // Send elimination RPC directly
             if (PhotonNetwork.IsMasterClient)
@@ -698,6 +722,33 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         if (CardManager.Instance != null)
         {
             hasDefuseInHand = CardManager.Instance.HasDefuseCardInHand();
+        }
+        
+        // QUAN TRỌNG: Cancel tất cả elimination timers ngay lập tức
+        CancelBackupEliminationTimers();
+        
+        // Force reset UI state trước khi elimination
+        if (explodingKittenUI != null)
+        {
+            explodingKittenUI.HideExplodingPanel();
+            explodingKittenUI.HidePositionInputPanel();
+        }
+        
+        // Reset exploding state
+        SetExplodingState(false);
+        
+        // Hide CardHolder khi player bị eliminate
+        if (CardHolder.Instance != null)
+        {
+            CardHolder.Instance.SetEliminatedState(true);
+            Debug.Log("[ELIMINATION] CardHolder hidden for eliminated player");
+        }
+        
+        // QUAN TRỌNG: Force enable UI interactions để đảm bảo UI không bị block
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.EnablePlayerInteractions();
+            Debug.Log("[ELIMINATION] UI interactions force enabled after elimination");
         }
         
         // Hiển thị UI elimination
@@ -743,9 +794,8 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             Debug.Log("[ATTACK] Attack card effect processed, turn should change");
         }
         
-        // Ensure UI interactions are restored after Attack effect with longer delay
-        Debug.Log("[ATTACK] Starting UI restoration coroutine");
-        StartCoroutine(RestoreUIAfterAttack());
+        // KHÔNG restore UI ngay - để GameManager.StartTurn xử lý
+        Debug.Log("[ATTACK] Attack effect completed - UI will be restored by turn management");
     }
     
     private void HandleFavorEffect(int playerId)
@@ -909,39 +959,8 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             Debug.Log("[SKIP] Skip card effect processed, turn should change");
         }
         
-        // Ensure UI interactions are restored after Skip effect with multiple attempts
-        Debug.Log("[SKIP] Starting UI restoration coroutine");
-        StartCoroutine(RestoreUIAfterSkip());
-    }
-    
-    private IEnumerator RestoreUIAfterAttack()
-    {
-        Debug.Log("[Attack] Starting UI restoration sequence");
-        
-        // Wait longer for Attack effects to settle
-        yield return new WaitForSeconds(0.5f);
-        
-        if (GameManager.Instance != null)
-        {
-            Debug.Log("[Attack] Enabling player interactions after Attack effect");
-            GameManager.Instance.EnablePlayerInteractions();
-            Debug.Log("[Attack] UI interactions restored");
-        }
-    }
-    
-    private IEnumerator RestoreUIAfterSkip()
-    {
-        Debug.Log("[Skip] Starting UI restoration sequence");
-        
-        // Wait longer for Skip effects to settle  
-        yield return new WaitForSeconds(0.5f);
-        
-        if (GameManager.Instance != null)
-        {
-            Debug.Log("[Skip] Enabling player interactions after Skip effect");
-            GameManager.Instance.EnablePlayerInteractions();
-            Debug.Log("[Skip] UI interactions restored");
-        }
+        // KHÔNG restore UI ngay - để GameManager.StartTurn xử lý
+        Debug.Log("[SKIP] Skip effect completed - UI will be restored by turn management");
     }
     
     private IEnumerator RestoreUIAfterEffect(string effectName)
@@ -962,8 +981,38 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"Người chơi {eliminatedPlayerId} đã bị loại!");
         
-        // Reset trạng thái exploding cho tất cả sử dụng phương thức trung tâm
-        SetExplodingState(false);
+        // CHỈ reset trạng thái exploding nếu người bị loại chính là người đang trong exploding sequence
+        // Điều này tránh việc reset exploding state khi có người khác cũng đang bị exploding
+        if (ExplodingPlayerId == eliminatedPlayerId)
+        {
+            Debug.Log($"Resetting exploding state because eliminated player {eliminatedPlayerId} was the one exploding");
+            SetExplodingState(false);
+            
+            // Hide exploding UI
+            if (explodingKittenUI != null)
+            {
+                explodingKittenUI.HideExplodingPanel();
+                explodingKittenUI.HidePositionInputPanel();
+            }
+            
+            // Enable player interactions after elimination
+            if (GameManager.Instance != null)
+            {
+                Debug.Log($"[ELIMINATION] Enabling player interactions after player {eliminatedPlayerId} elimination");
+                GameManager.Instance.EnablePlayerInteractions();
+            }
+        }
+        else
+        {
+            Debug.Log($"Not resetting exploding state - eliminated player {eliminatedPlayerId} was not the exploding player (current exploding: {ExplodingPlayerId})");
+        }
+        
+        // Hide CardHolder nếu là local player bị eliminate
+        if (PhotonNetwork.LocalPlayer.ActorNumber == eliminatedPlayerId && CardHolder.Instance != null)
+        {
+            CardHolder.Instance.SetEliminatedState(true);
+            Debug.Log($"[ELIMINATION] CardHolder hidden for eliminated local player {eliminatedPlayerId}");
+        }
         
         // Thông báo GameManager về việc loại bỏ player
         if (GameManager.Instance != null)
@@ -1014,12 +1063,47 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
             explodingKittenUI.HideExplodingPanel();
             explodingKittenUI.HidePositionInputPanel();
         }
+        
+        // QUAN TRỌNG: Khôi phục lại player interactions sau khi exploding kết thúc
+        if (GameManager.Instance != null)
+        {
+            Debug.Log("Enabling player interactions after exploding sequence ends");
+            GameManager.Instance.EnablePlayerInteractions();
+        }
     }
     
     [PunRPC]
     public void RPC_ShowWinner(string winnerName)
     {
         Debug.Log($"[RPC_ShowWinner] Winner announced: {winnerName}");
+        
+        // QUAN TRỌNG: Reset exploding state và UI blocking trước khi hiển thị GameOver
+        // Điều này đảm bảo người cuối cùng bị nổ không bị block UI
+        if (IsExplodingInProgress)
+        {
+            Debug.Log("[RPC_ShowWinner] Resetting exploding state to prevent UI blocking in GameOver");
+            SetExplodingState(false);
+            
+            // Tắt tất cả exploding UI panels
+            if (explodingKittenUI != null)
+            {
+                explodingKittenUI.HideExplodingPanel();
+                explodingKittenUI.HidePositionInputPanel();
+            }
+            
+            // Cancel any running elimination timers
+            if (Instance != null)
+            {
+                Instance.CancelBackupEliminationTimers();
+            }
+        }
+        
+        // Force enable UI interactions để đảm bảo GameOver panel có thể tương tác
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.EnablePlayerInteractions();
+            Debug.Log("[RPC_ShowWinner] UI interactions enabled for GameOver panel");
+        }
         
         if (gameSetUI != null)
         {
@@ -1384,6 +1468,20 @@ public class CardEffectManager : MonoBehaviourPunCallbacks
         }
         
         Debug.Log($"[CardEffectManager] Force enabled {allButtons.Length} buttons");
+    }
+    
+    // Public method để force enable UI interactions nếu có vấn đề 
+    [ContextMenu("Force Enable Player Interactions")]
+    public void ForceEnablePlayerInteractions()
+    {
+        Debug.Log("[CardEffectManager] Force enabling player interactions");
+        
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.EnablePlayerInteractions();
+        }
+        
+        ForceRestoreCardInteractions();
     }
 
     // Method to cancel backup elimination timers when defuse is successful

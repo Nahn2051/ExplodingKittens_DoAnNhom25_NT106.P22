@@ -18,6 +18,7 @@ public class ExplodingKittenUI : MonoBehaviourPun
     
     private bool hasDefuseInZone = false;
     private Coroutine countdownCoroutine;
+    private bool turnManagementInProgress = false; // Flag để tránh duplicate turn calls
     
     // Events để thông báo cho CardEffectManager
     public event Action<int> OnDefuseConfirmed;
@@ -48,6 +49,7 @@ public class ExplodingKittenUI : MonoBehaviourPun
         Debug.Log("Syncing exploding kitten sequence for all players!");
         
         hasDefuseInZone = false;
+        turnManagementInProgress = false; // Reset flag khi bắt đầu sequence mới
         
         if (countdownCoroutine != null)
         {
@@ -80,12 +82,12 @@ public class ExplodingKittenUI : MonoBehaviourPun
         }
         
         // Chỉ hiển thị defuse zone cho người chơi bị exploding
+        bool isLocalPlayerExploding = PhotonNetwork.LocalPlayer.ActorNumber == explodingPlayerActorNumber;
         if (defuseZone != null)
         {
-            bool isExplodingPlayer = PhotonNetwork.LocalPlayer.ActorNumber == explodingPlayerActorNumber;
-            defuseZone.SetActive(isExplodingPlayer);
+            defuseZone.SetActive(isLocalPlayerExploding);
             
-            if (isExplodingPlayer)
+            if (isLocalPlayerExploding)
             {
                 Debug.Log("Defuse zone activated for exploding player");
             }
@@ -99,8 +101,16 @@ public class ExplodingKittenUI : MonoBehaviourPun
             Debug.LogError("defuseZone is null!");
         }
         
-        countdownCoroutine = StartCoroutine(CountdownTimer(10f));
-        Debug.Log("Started new 10-second countdown for all players");
+        // Chỉ người bị exploding mới chạy countdown và update cho mọi người
+        if (isLocalPlayerExploding)
+        {
+            countdownCoroutine = StartCoroutine(CountdownTimer(10f));
+            Debug.Log("Started new 10-second countdown - only exploding player manages it");
+        }
+        else
+        {
+            Debug.Log("Non-exploding player - waiting for countdown updates from exploding player");
+        }
     }
     
     private IEnumerator CountdownTimer(float duration)
@@ -116,7 +126,7 @@ public class ExplodingKittenUI : MonoBehaviourPun
                 yield break;
             }
             
-            // Đồng bộ countdown với tất cả client
+            // Chỉ người bị exploding mới gửi countdown update cho tất cả
             photonView.RPC("SyncCountdownText", RpcTarget.All, timeRemaining);
                 
             yield return new WaitForSeconds(0.1f);
@@ -129,6 +139,7 @@ public class ExplodingKittenUI : MonoBehaviourPun
             yield break;
         }
         
+        // Gửi countdown cuối cùng
         photonView.RPC("SyncCountdownText", RpcTarget.All, 0f);
             
         Debug.Log($"[ExplodingKittenUI] Countdown finished. hasDefuseInZone: {hasDefuseInZone}");
@@ -137,10 +148,11 @@ public class ExplodingKittenUI : MonoBehaviourPun
         {
             Debug.Log("[ExplodingKittenUI] No defuse provided, eliminating player");
             
-            // Ẩn panel và loại bỏ player
+            // Ẩn panel và đồng bộ elimination với tất cả người chơi
             photonView.RPC("SyncHideExplodingPanel", RpcTarget.All);
             
-            OnPlayerEliminated?.Invoke();
+            // Đồng bộ elimination với tất cả người chơi thay vì chỉ gọi local event
+            photonView.RPC("SyncPlayerElimination", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
             
             // Backup elimination nếu cần
             StartCoroutine(BackupEliminationCheck());
@@ -157,9 +169,47 @@ public class ExplodingKittenUI : MonoBehaviourPun
         if (countdownText != null)
         {
             if (timeRemaining > 0)
-                countdownText.text = $"{timeRemaining:F1}s";
+                countdownText.text = $"{Mathf.CeilToInt(timeRemaining)}s";
             else
                 countdownText.text = "0s";
+        }
+    }
+    
+    [PunRPC]
+    private void SyncPlayerElimination(int eliminatedPlayerActorNumber)
+    {
+        Debug.Log($"[ExplodingKittenUI] SyncPlayerElimination - Player {eliminatedPlayerActorNumber} eliminated");
+        
+        // Reset UI state trước khi elimination
+        if (explodingKittenPanel != null)
+            explodingKittenPanel.SetActive(false);
+            
+        if (defuseZone != null)
+            defuseZone.SetActive(false);
+            
+        if (positionInputPanel != null)
+            positionInputPanel.SetActive(false);
+        
+        // Reset countdown nếu đang chạy
+        if (countdownCoroutine != null)
+        {
+            StopCoroutine(countdownCoroutine);
+            countdownCoroutine = null;
+            Debug.Log("[ExplodingKittenUI] Stopped countdown due to player elimination");
+        }
+        
+        // Chỉ gọi GameManager để xử lý elimination, không gọi local event nữa
+        // vì GameManager sẽ handle tất cả logic elimination bao gồm cả việc thông báo CardEffectManager
+        if (GameManager.Instance != null)
+        {
+            Debug.Log($"[ExplodingKittenUI] Calling GameManager.EliminatePlayer for player {eliminatedPlayerActorNumber}");
+            GameManager.Instance.EliminatePlayer(eliminatedPlayerActorNumber);
+        }
+        else
+        {
+            Debug.LogError("[ExplodingKittenUI] GameManager.Instance is null during elimination sync!");
+            // Fallback: chỉ gọi local event nếu GameManager không có
+            OnPlayerEliminated?.Invoke();
         }
     }
     
@@ -181,7 +231,9 @@ public class ExplodingKittenUI : MonoBehaviourPun
         if (CardEffectManager.IsExplodingInProgress)
         {
             Debug.LogWarning("[ExplodingKittenUI] Backup elimination check: Still in exploding state, forcing elimination again");
-            OnPlayerEliminated?.Invoke();
+            
+            // Đồng bộ elimination với tất cả người chơi
+            photonView.RPC("SyncPlayerElimination", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
         }
     }
     
@@ -241,6 +293,42 @@ public class ExplodingKittenUI : MonoBehaviourPun
         // Ẩn defuse zone cho tất cả người chơi khi defuse thành công
         if (defuseZone != null)
             defuseZone.SetActive(false);
+            
+        // QUAN TRỌNG: Không gọi ProcessExplodingKittenDefused ở đây nữa
+        // Chỉ gọi sau khi hoàn thành position input trong OnConfirmPositionClicked
+        Debug.Log("[ExplodingKittenUI] Defuse successful, waiting for position input to complete turn management");
+    }
+    
+    private IEnumerator EnsureUIRestoration()
+    {
+        yield return new WaitForSeconds(1f); // Tăng delay để đảm bảo
+        
+        // Safety check: Đảm bảo UI interactions được khôi phục
+        if (GameManager.Instance != null && !CardEffectManager.IsExplodingInProgress)
+        {
+            Debug.Log("[ExplodingKittenUI] Safety check - ensuring UI interactions are restored");
+            GameManager.Instance.EnablePlayerInteractions();
+        }
+        else if (GameManager.Instance != null)
+        {
+            // Force reset exploding state nếu vẫn còn
+            GameManager.Instance.SetExplodingInProgress(false);
+            GameManager.Instance.EnablePlayerInteractions();
+            Debug.Log("[ExplodingKittenUI] Force reset exploding state and enable UI");
+        }
+        
+        // Backup: Ẩn tất cả UI panels có thể còn hiển thị
+        if (positionInputPanel != null && positionInputPanel.activeInHierarchy)
+        {
+            positionInputPanel.SetActive(false);
+            Debug.Log("[ExplodingKittenUI] Backup: Hidden position input panel");
+        }
+        
+        if (explodingKittenPanel != null && explodingKittenPanel.activeInHierarchy)
+        {
+            explodingKittenPanel.SetActive(false);
+            Debug.Log("[ExplodingKittenUI] Backup: Hidden exploding kitten panel");
+        }
     }
     
     private void OnConfirmPositionClicked()
@@ -255,7 +343,14 @@ public class ExplodingKittenUI : MonoBehaviourPun
                 {
                     positionInputPanel.SetActive(false);
                     
+                    // Trigger defuse confirmed event
                     OnDefuseConfirmed?.Invoke(position - 1);
+                    
+                    // QUAN TRỌNG: Chỉ sau khi hoàn thành position input mới xử lý turn management
+                    Debug.Log("[ExplodingKittenUI] Position input completed, now processing turn management");
+                    
+                    // Delay nhỏ để đảm bảo exploding card được add vào deck trước
+                    StartCoroutine(ProcessTurnAfterPositionInput());
                 }
                 else
                 {
@@ -267,6 +362,92 @@ public class ExplodingKittenUI : MonoBehaviourPun
                 Debug.LogWarning("Please enter a valid number!");
             }
         }
+    }
+    
+    private IEnumerator ProcessTurnAfterPositionInput()
+    {
+        // Kiểm tra xem đã có turn management process nào đang chạy chưa
+        if (turnManagementInProgress)
+        {
+            Debug.LogWarning("[ExplodingKittenUI] Turn management already in progress, skipping duplicate call");
+            yield break;
+        }
+        
+        turnManagementInProgress = true;
+        Debug.Log("[ExplodingKittenUI] Starting turn management process");
+        
+        // Chờ một chút để đảm bảo exploding card được add vào deck
+        yield return new WaitForSeconds(0.5f);
+        
+        // QUAN TRỌNG: Chỉ Master Client xử lý turn management để tránh duplicate
+        if (PhotonNetwork.IsMasterClient && GameManager.Instance != null)
+        {
+            Debug.Log("[ExplodingKittenUI] Master client processing turn management after position input");
+            
+            // Lấy exploding player ID - sử dụng current player làm exploding player
+            int explodingPlayerIdForTurnTransition = PhotonNetwork.LocalPlayer.ActorNumber;
+            
+            // Tìm index của người chơi đã rút exploding card trong playerList
+            int explodingPlayerIndex = -1;
+            for (int i = 0; i < GameManager.Instance.playerList.Count; i++)
+            {
+                if (GameManager.Instance.playerList[i].ActorNumber == explodingPlayerIdForTurnTransition)
+                {
+                    explodingPlayerIndex = i;
+                    break;
+                }
+            }
+            
+            // Nếu không tìm thấy exploding player, sử dụng current turn index làm fallback
+            int currentPlayerIndex = (explodingPlayerIndex >= 0) ? explodingPlayerIndex : GameManager.Instance.GetCurrentTurnIndex();
+            int nextPlayerIndex = GameManager.Instance.GetNextAlivePlayerIndex(currentPlayerIndex);
+            
+            Debug.Log($"[ExplodingKittenUI] Defuse successful: explodingPlayerIndex={explodingPlayerIndex}, turn passing from player index {currentPlayerIndex} to player index {nextPlayerIndex}");
+            
+            // Đảm bảo rằng next player không phải là chính player đã defuse (trừ khi chỉ có 1 player còn lại)
+            if (nextPlayerIndex == currentPlayerIndex && GameManager.Instance.playerList.Count > 1)
+            {
+                Debug.LogWarning("[ExplodingKittenUI] Next player is same as current player, this shouldn't happen unless only 1 player remains");
+                // Thử tìm next player khác một lần nữa
+                nextPlayerIndex = GameManager.Instance.GetNextAlivePlayerIndex(nextPlayerIndex);
+            }
+            
+            // Chuyển lượt với 1 turn bình thường (không còn attack turns)
+            // Sau khi exploding được defuse, turn hiện tại kết thúc và chuyển sang người tiếp theo
+            GameManager.Instance.StartTurn(nextPlayerIndex, 1);
+            
+            // UI interactions sẽ được enable bởi RPC_StartTurn với delay
+            Debug.Log("[ExplodingKittenUI] Turn changed, UI will be enabled by RPC_StartTurn");
+        }
+        else if (!PhotonNetwork.IsMasterClient && GameManager.Instance != null)
+        {
+            // Non-master clients yêu cầu Master Client xử lý turn management
+            Debug.Log("[ExplodingKittenUI] Non-master client requesting turn management from Master Client");
+            
+            // Lấy current player index và tìm next player
+            int currentPlayerIndex = GameManager.Instance.GetCurrentTurnIndex();
+            int nextPlayerIndex = GameManager.Instance.GetNextAlivePlayerIndex(currentPlayerIndex);
+            
+            Debug.Log($"[ExplodingKittenUI] Non-master client requesting turn change from {currentPlayerIndex} to {nextPlayerIndex}");
+            
+            // Yêu cầu Master Client chuyển lượt
+            photonView.RPC("RPC_RequestTurnChangeAfterDefuse", RpcTarget.MasterClient, nextPlayerIndex);
+            
+            Debug.Log($"[ExplodingKittenUI] Sent RPC_RequestTurnChangeAfterDefuse to Master Client for player {nextPlayerIndex}");
+            
+            // UI interactions sẽ được enable bởi RPC_StartTurn với delay  
+            Debug.Log("[ExplodingKittenUI] UI will be enabled by RPC_StartTurn after turn change");
+        }
+        else
+        {
+            // Fallback: nếu GameManager không có, enable UI trực tiếp
+            Debug.LogWarning("[ExplodingKittenUI] GameManager not found, enabling UI directly");
+            StartCoroutine(EnsureUIRestoration());
+        }
+        
+        // Reset flag sau khi hoàn thành
+        turnManagementInProgress = false;
+        Debug.Log("[ExplodingKittenUI] Turn management process completed");
     }
     
     public void HideExplodingPanel()
@@ -326,7 +507,9 @@ public class ExplodingKittenUI : MonoBehaviourPun
     public void ForcePlayerElimination()
     {
         Debug.Log("Force eliminating player due to exploding without defuse");
-        OnPlayerEliminated?.Invoke();
+        
+        // Đồng bộ elimination với tất cả người chơi
+        photonView.RPC("SyncPlayerElimination", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
     }
     
     public bool IsCountdownActive()
@@ -366,6 +549,26 @@ public class ExplodingKittenUI : MonoBehaviourPun
         else
         {
             Debug.LogWarning("Cannot update placeholder - missing components!");
+        }
+    }
+    
+    [PunRPC]
+    private void RPC_RequestTurnChangeAfterDefuse(int nextPlayerIndex)
+    {
+        // Chỉ Master Client xử lý yêu cầu chuyển lượt
+        if (PhotonNetwork.IsMasterClient && GameManager.Instance != null)
+        {
+            Debug.Log($"[ExplodingKittenUI] Master client received request to change turn to player {nextPlayerIndex} after defuse");
+            GameManager.Instance.StartTurn(nextPlayerIndex, 1);
+            Debug.Log($"[ExplodingKittenUI] Master client successfully processed turn change to player {nextPlayerIndex}");
+        }
+        else if (!PhotonNetwork.IsMasterClient)
+        {
+            Debug.LogWarning("[ExplodingKittenUI] Non-master client received RPC_RequestTurnChangeAfterDefuse - this should not happen");
+        }
+        else
+        {
+            Debug.LogError("[ExplodingKittenUI] GameManager.Instance is null when processing turn change request");
         }
     }
 }

@@ -326,7 +326,7 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         }
         
         // Danh sách card types có thể chọn
-        string[] cardTypes = {"Favor", "Shuffle", "Skip", "SeeTheFuture", "Defuse",
+        string[] cardTypes = {"Favor", "Shuffle", "Skip", "SeeTheFuture", "Defuse", "Attack",
                               "HairyPotatoCat", "BeardCat", "Cattermelon", "Tacocat", "RainbowRalphingCat"};
         
         foreach (string cardType in cardTypes)

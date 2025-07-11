@@ -123,6 +123,45 @@ public class CardHolder : MonoBehaviour
         Debug.Log($"Card interactions set to {enable} for {Cards.Count} cards");
     }
     
+    // Method to hide/show CardHolder when player is eliminated
+    public void SetCardHolderVisible(bool visible)
+    {
+        if (gameObject != null)
+        {
+            gameObject.SetActive(visible);
+            Debug.Log($"CardHolder visibility set to {visible}");
+        }
+    }
+    
+    // Method to disable all cards and make them semi-transparent when eliminated
+    public void SetEliminatedState(bool isEliminated)
+    {
+        foreach (Card card in Cards)
+        {
+            if (card != null)
+            {
+                // Disable interaction
+                card.SetInteractable(!isEliminated);
+                
+                // Make cards semi-transparent if eliminated
+                if (card.GetComponent<UnityEngine.UI.Image>() != null)
+                {
+                    Color cardColor = card.GetComponent<UnityEngine.UI.Image>().color;
+                    cardColor.a = isEliminated ? 0.3f : 1.0f;
+                    card.GetComponent<UnityEngine.UI.Image>().color = cardColor;
+                }
+            }
+        }
+        
+        // Optionally hide the entire holder
+        if (isEliminated)
+        {
+            SetCardHolderVisible(false);
+        }
+        
+        Debug.Log($"CardHolder eliminated state set to {isEliminated}");
+    }
+    
     public void RemoveCard(Card card)
     {
         if (card == null || !Cards.Contains(card)) return;

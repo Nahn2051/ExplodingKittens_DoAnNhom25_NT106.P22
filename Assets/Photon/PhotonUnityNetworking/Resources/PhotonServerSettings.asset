@@ -75,6 +75,24 @@ MonoBehaviour:
   - RPC_ReturnToMainMenu
   - RPC_ShowNopeEffect
   - RPC_ShowWinner
+  - SyncCountdownText
+  - SyncDefuseSuccess
+  - SyncExplodingCardImage
+  - SyncHideExplodingPanel
+  - SyncHideExplodingPanelWithCountdown
+  - SyncStartExplodingSequence
+  - SyncPlayerElimination
+  - RPC_EnableUIAfterDefuse
+  - RPC_EnableUIAfterElimination
+  - RPC_SyncAttackTurns
+  - RPC_StartTurnWithSyncedAttackTurns
+  - RPC_ReportAttackTurns
+  - RPC_SyncAttackTurnsAfterDefuse
+  - RPC_DecrementAttackTurns
+  - RPC_ProcessDefuseAndCheckTurn
+  - RPC_ProcessSkipEffect
+  - RPC_RequestContinueTurn
+  - RPC_RequestTurnChangeAfterDefuse
   DisableAutoOpenWizard: 1
   ShowSettings: 1
-  DevRegionSetOnce: 0
+  DevRegionSetOnce: 1

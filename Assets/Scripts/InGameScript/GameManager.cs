@@ -213,27 +213,128 @@ public class GameManager : MonoBehaviourPunCallbacks
         // Giảm thời gian chờ từ 0.5s xuống 0.1s
         yield return new WaitForSeconds(0.1f);
 
+        // Đồng bộ việc giảm attackTurns cho tất cả clients trước khi kiểm tra exploding
+        photonView.RPC("RPC_DecrementAttackTurns", RpcTarget.All);
+        
+        // Wait thêm một chút để RPC được xử lý
+        yield return new WaitForSeconds(0.1f);
+
         // QUAN TRỌNG: Không chuyển lượt nếu exploding sequence đang diễn ra
         if (CardEffectManager.IsExplodingInProgress)
         {
             Debug.Log("Exploding sequence in progress - not changing turn");
             yield break;
         }
-
-        attackTurns--; // Giảm số lượt tấn công còn lại
-
-        if (attackTurns > 0)
+        
+        // THÊM: Kiểm tra xem có exploding sequence nào được trigger sau khi draw không
+        yield return new WaitForSeconds(0.2f); // Wait thêm để exploding sequence có thể start
+        
+        if (CardEffectManager.IsExplodingInProgress)
         {
-            // Nếu vẫn còn lượt tấn công, không chuyển người, chỉ reset lượt của chính mình
-            photonView.RPC("RPC_StartTurn", RpcTarget.All, currentTurnIndex, attackTurns);
+            Debug.Log("Exploding sequence started after draw - aborting turn change");
+            yield break;
         }
-        else // Hết lượt, chuyển cho người tiếp theo
+
+        // Chỉ Master Client xử lý turn management
+        if (PhotonNetwork.IsMasterClient)
         {
-            // Tìm người chơi tiếp theo chưa bị loại
-            int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
-            
-            // Yêu cầu Master Client chuyển lượt cho người chơi tiếp theo với 1 lượt bình thường
-            photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, 1);
+            if (attackTurns > 0)
+            {
+                // Nếu vẫn còn lượt tấn công, không chuyển người, chỉ reset lượt của chính mình
+                photonView.RPC("RPC_StartTurn", RpcTarget.All, currentTurnIndex, attackTurns);
+            }
+            else // Hết lượt, chuyển cho người tiếp theo
+            {
+                // Tìm người chơi tiếp theo chưa bị loại
+                int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
+                
+                // Chuyển lượt cho người chơi tiếp theo với 1 lượt bình thường
+                photonView.RPC("RPC_StartTurn", RpcTarget.All, nextPlayerIndex, 1);
+            }
+        }
+        else
+        {
+            // Non-master clients request turn management từ Master Client
+            Debug.Log($"[CLIENT] Requesting turn management from Master Client. attackTurns: {attackTurns}");
+            if (attackTurns > 0)
+            {
+                // Vẫn còn lượt, yêu cầu Master Client reset lượt hiện tại
+                Debug.Log($"[CLIENT] Requesting continue turn for player {currentTurnIndex} with {attackTurns} turns");
+                photonView.RPC("RPC_RequestContinueTurn", RpcTarget.MasterClient, currentTurnIndex, attackTurns);
+            }
+            else
+            {
+                // Hết lượt, yêu cầu Master Client chuyển lượt
+                int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
+                Debug.Log($"[CLIENT] Requesting start turn for next player {nextPlayerIndex} with 1 turn");
+                photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, 1);
+            }
+        }
+    }
+    
+    [PunRPC]
+    private void RPC_DecrementAttackTurns()
+    {
+        // Đồng bộ việc giảm attackTurns cho tất cả clients
+        attackTurns--;
+        Debug.Log($"[DRAW] attackTurns decremented to: {attackTurns}");
+    }
+    
+    // Xử lý khi exploding kitten được defuse - cần giảm attack turns vì đã rút 1 lá
+    public void ProcessExplodingKittenDefused()
+    {
+        Debug.Log($"[EXPLODING DEFUSED] Processing exploding kitten defuse. Current attackTurns: {attackTurns}");
+        
+        // Reset exploding state trước tiên
+        SetExplodingInProgress(false);
+        Debug.Log("[EXPLODING DEFUSED] Reset exploding state after successful defuse");
+        
+        // Đồng bộ việc giảm attackTurns cho tất cả người chơi thông qua RPC
+        photonView.RPC("RPC_ProcessDefuseAndCheckTurn", RpcTarget.All);
+        
+        // Enable UI interactions cho tất cả người chơi
+        photonView.RPC("RPC_EnableUIAfterDefuse", RpcTarget.All);
+    }
+    
+    [PunRPC]
+    private void RPC_ProcessDefuseAndCheckTurn()
+    {
+        // Giảm số lượt attack vì đã rút 1 lá (exploding kitten) - đồng bộ cho tất cả clients
+        attackTurns--;
+        
+        Debug.Log($"[EXPLODING DEFUSED] After defuse, attackTurns remaining: {attackTurns}");
+        
+        // Chỉ Master Client xử lý turn management để tránh duplicate
+        if (PhotonNetwork.IsMasterClient)
+        {
+            if (attackTurns > 0)
+            {
+                // Vẫn còn lượt phải rút, tiếp tục lượt của player hiện tại
+                Debug.Log($"[EXPLODING DEFUSED] Player still needs to draw {attackTurns} more cards");
+                photonView.RPC("RPC_StartTurn", RpcTarget.All, currentTurnIndex, attackTurns);
+            }
+            else
+            {
+                // Đã hết lượt (attackTurns == 0), chuyển cho người tiếp theo
+                Debug.Log("[EXPLODING DEFUSED] attackTurns == 0, advancing to next player");
+                int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
+                photonView.RPC("RPC_StartTurn", RpcTarget.All, nextPlayerIndex, 1);
+            }
+        }
+        else
+        {
+            // Non-master clients request turn management từ Master Client sau defuse
+            if (attackTurns > 0)
+            {
+                // Vẫn còn lượt, yêu cầu Master Client tiếp tục lượt hiện tại
+                photonView.RPC("RPC_RequestContinueTurn", RpcTarget.MasterClient, currentTurnIndex, attackTurns);
+            }
+            else
+            {
+                // Hết lượt, yêu cầu Master Client chuyển lượt
+                int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
+                photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, 1);
+            }
         }
     }
     
@@ -266,7 +367,19 @@ public class GameManager : MonoBehaviourPunCallbacks
         // Chỉ host xử lý yêu cầu chuyển lượt
         if (PhotonNetwork.IsMasterClient)
         {
+            Debug.Log($"[MASTER] Received request to start turn for player {nextPlayerIndex} with {newAttackTurns} turns");
             StartTurn(nextPlayerIndex, newAttackTurns);
+        }
+    }
+    
+    [PunRPC]
+    private void RPC_RequestContinueTurn(int playerIndex, int remainingAttackTurns)
+    {
+        // Chỉ host xử lý yêu cầu tiếp tục lượt
+        if (PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log($"[MASTER] Received request to continue turn for player {playerIndex} with {remainingAttackTurns} turns");
+            photonView.RPC("RPC_StartTurn", RpcTarget.All, playerIndex, remainingAttackTurns);
         }
     }
     
@@ -293,15 +406,25 @@ public class GameManager : MonoBehaviourPunCallbacks
             activePlayerName = playerList[playerIndex].NickName;
         }
         
-        Debug.Log("Bắt đầu lượt chơi của người chơi: " + activePlayerName + " (index: " + playerIndex + ")");
+        Debug.Log($"[RPC_StartTurn] Player: {activePlayerName} (index: {playerIndex}), attackTurns: {attackTurns}");
         
         bool isLocalPlayerTurn = (playerIndex == localPlayerIndex);
         
-        // Bật/tắt nút Draw Card dựa trên lượt
+        // Bật/tắt nút Draw Card dựa trên lượt và attackTurns
         if (drawCardButton != null && drawCardButtonComponent != null)
         {
-            // Không ẩn nút, chỉ vô hiệu hóa khi không phải lượt của người chơi
-            drawCardButtonComponent.interactable = isLocalPlayerTurn;
+            // QUAN TRỌNG: Chỉ enable nút draw khi:
+            // 1. Là lượt của local player
+            // 2. Không có exploding sequence đang diễn ra  
+            // 3. Còn attackTurns > 0 (còn lượt cần rút)
+            bool shouldEnableDrawButton = isLocalPlayerTurn && 
+                                        !isExplodingInProgress && 
+                                        !CardEffectManager.IsExplodingInProgress &&
+                                        attackTurns > 0;
+            
+            drawCardButtonComponent.interactable = shouldEnableDrawButton;
+            
+            Debug.Log($"[RPC_StartTurn] Draw button state: isLocalTurn={isLocalPlayerTurn}, attackTurns={attackTurns}, shouldEnable={shouldEnableDrawButton}");
         }
         
         // Hiển thị thông báo lượt chơi
@@ -325,6 +448,14 @@ public class GameManager : MonoBehaviourPunCallbacks
         
         // Cập nhật màu background cho tất cả player slot
         UpdatePlayerSlotColors(playerIndex);
+        
+        // QUAN TRỌNG: Enable UI interactions sau khi start turn để tránh UI conflicts
+        if (!isExplodingInProgress && !CardEffectManager.IsExplodingInProgress)
+        {
+            Debug.Log("[RPC_StartTurn] Enabling UI interactions after turn start");
+            // Delay nhỏ để đảm bảo tất cả state đã được sync
+            StartCoroutine(DelayedEnablePlayerInteractions(0.1f));
+        }
     }
     
     private void UpdatePlayerSlotColors(int currentPlayerIndex)
@@ -455,10 +586,27 @@ public class GameManager : MonoBehaviourPunCallbacks
     // Thêm phương thức loại bỏ player
     public void EliminatePlayer(int playerId)
     {
+        Debug.Log($"[ELIMINATION] EliminatePlayer called for player {playerId}");
+        
         if (!IsPlayerEliminated(playerId))
         {
             eliminatedPlayerIds.Add(playerId);
-            Debug.Log($"Player {playerId} đã bị loại bỏ");
+            Debug.Log($"[ELIMINATION] Player {playerId} đã bị loại bỏ. Total eliminated: {eliminatedPlayerIds.Count}");
+            
+            // In ra danh sách những người bị eliminate
+            string eliminatedList = string.Join(", ", eliminatedPlayerIds);
+            Debug.Log($"[ELIMINATION] Current eliminated players: [{eliminatedList}]");
+            
+            // QUAN TRỌNG: Reset exploding state ngay sau khi eliminate để unblock UI
+            SetExplodingInProgress(false);
+            Debug.Log($"[ELIMINATION] Reset exploding state after player {playerId} elimination");
+            
+            // QUAN TRỌNG: Ẩn CardHolder cho player bị eliminate
+            if (PhotonNetwork.LocalPlayer.ActorNumber == playerId && CardHolder.Instance != null)
+            {
+                CardHolder.Instance.SetEliminatedState(true);
+                Debug.Log($"[ELIMINATION] CardHolder hidden for eliminated local player {playerId}");
+            }
             
             // Tìm và update UI của player bị loại
             UpdateEliminatedPlayerUI(playerId);
@@ -469,13 +617,28 @@ public class GameManager : MonoBehaviourPunCallbacks
             // Nếu game chưa kết thúc, tiếp tục chuyển lượt
             if (!IsGameEnded())
             {
-                // Chuyển lượt nếu người bị loại đang có lượt
-                if (GetCurrentPlayerActorNumber() == playerId && PhotonNetwork.IsMasterClient)
+                // Chuyển lượt nếu người bị loại đang có lượt hoặc nếu exploding state đang active
+                bool isEliminatedPlayerCurrentTurn = GetCurrentPlayerActorNumber() == playerId;
+                bool shouldAdvanceTurn = isEliminatedPlayerCurrentTurn || isExplodingInProgress;
+                
+                if (shouldAdvanceTurn && PhotonNetwork.IsMasterClient)
                 {
+                    Debug.Log($"[ELIMINATION] Advancing turn after player {playerId} elimination. IsCurrentTurn: {isEliminatedPlayerCurrentTurn}, IsExploding: {isExplodingInProgress}");
                     int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
                     StartTurn(nextPlayerIndex);
                 }
+                else
+                {
+                    Debug.Log($"[ELIMINATION] Not advancing turn. IsMasterClient: {PhotonNetwork.IsMasterClient}, ShouldAdvance: {shouldAdvanceTurn}");
+                }
+                
+                // QUAN TRỌNG: Enable UI interactions cho tất cả người chơi sau khi elimination
+                photonView.RPC("RPC_EnableUIAfterElimination", RpcTarget.All);
             }
+        }
+        else
+        {
+            Debug.LogWarning($"[ELIMINATION] Player {playerId} is already eliminated! Skipping duplicate elimination.");
         }
     }
     
@@ -539,26 +702,63 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         // Sử dụng GetNextAlivePlayerIndex để tìm người chơi tiếp theo còn sống
         int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
-        photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, turnsToPass);
+        
+        // Chỉ Master Client xử lý turn transition
+        if (PhotonNetwork.IsMasterClient)
+        {
+            photonView.RPC("RPC_StartTurn", RpcTarget.All, nextPlayerIndex, turnsToPass);
+        }
+        else
+        {
+            photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, turnsToPass);
+        }
     }
 
     public void ProcessSkipPlayed()
     {
         if (!IsLocalPlayerTurn()) return;
 
-        // Giảm số lượt phải chơi đi 1
+        // Đồng bộ việc giảm attackTurns cho tất cả clients
+        photonView.RPC("RPC_ProcessSkipEffect", RpcTarget.All);
+    }
+    
+    [PunRPC]
+    private void RPC_ProcessSkipEffect()
+    {
+        // Giảm số lượt phải chơi đi 1 - đồng bộ cho tất cả clients
         this.attackTurns--;
-
-        if (this.attackTurns > 0)
+        
+        Debug.Log($"[SKIP] attackTurns decremented to: {this.attackTurns}");
+        
+        // Chỉ Master Client xử lý turn management
+        if (PhotonNetwork.IsMasterClient)
         {
-            // Nếu vẫn còn lượt, bắt đầu lại lượt của chính người chơi này với số lượt còn lại
-            photonView.RPC("RPC_StartTurn", RpcTarget.All, this.currentTurnIndex, this.attackTurns);
+            if (this.attackTurns > 0)
+            {
+                // Nếu vẫn còn lượt, bắt đầu lại lượt của chính người chơi này với số lượt còn lại
+                photonView.RPC("RPC_StartTurn", RpcTarget.All, this.currentTurnIndex, this.attackTurns);
+            }
+            else
+            {
+                // Nếu đã hết lượt, chuyển cho người chơi tiếp theo với 1 lượt bình thường
+                int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
+                photonView.RPC("RPC_StartTurn", RpcTarget.All, nextPlayerIndex, 1);
+            }
         }
         else
         {
-            // Nếu đã hết lượt, chuyển cho người chơi tiếp theo với 1 lượt bình thường
-            int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
-            photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, 1);
+            // Non-master clients request turn management từ Master Client
+            if (this.attackTurns > 0)
+            {
+                // Vẫn còn lượt, yêu cầu Master Client tiếp tục lượt hiện tại
+                photonView.RPC("RPC_RequestContinueTurn", RpcTarget.MasterClient, this.currentTurnIndex, this.attackTurns);
+            }
+            else
+            {
+                // Hết lượt, yêu cầu Master Client chuyển lượt
+                int nextPlayerIndex = GetNextAlivePlayerIndex(currentTurnIndex);
+                photonView.RPC("RPC_RequestStartTurn", RpcTarget.MasterClient, nextPlayerIndex, 1);
+            }
         }
     }
 
@@ -569,34 +769,31 @@ public class GameManager : MonoBehaviourPunCallbacks
         Player winner = null;
         List<Player> alivePlayersList = new List<Player>();
         
-        // Đếm số người chơi còn sống
+        // Đếm số người chơi còn sống và tìm winner
         foreach (Player player in PhotonNetwork.PlayerList)
         {
             if (!IsPlayerEliminated(player.ActorNumber))
             {
                 alivePlayers++;
-                winner = player;
+                winner = player; // Người cuối cùng còn sống sẽ là winner
                 alivePlayersList.Add(player);
             }
         }
         
         Debug.Log($"CheckForWinner: {alivePlayers} players alive");
         
-        // Kiểm tra điều kiện thắng
-        if (alivePlayers <= 1)
+        // In ra danh sách những người còn sống để debug
+        foreach (Player alivePlayer in alivePlayersList)
         {
-            if (winner != null)
-            {
-                Debug.Log($"Game Over! Winner: {winner.NickName}");
-                // Thông báo winner cho tất cả người chơi
-                photonView.RPC("RPC_AnnounceWinner", RpcTarget.All, winner.NickName);
-            }
-            else
-            {
-                Debug.Log("Game Over! No winner (all players eliminated)");
-                // Trường hợp đặc biệt: không có ai thắng
-                photonView.RPC("RPC_AnnounceWinner", RpcTarget.All, "No One");
-            }
+            Debug.Log($"Alive player: {alivePlayer.NickName} (ActorNumber: {alivePlayer.ActorNumber})");
+        }
+        
+        // Kiểm tra điều kiện thắng - chỉ khi còn đúng 1 người
+        if (alivePlayers == 1 && winner != null)
+        {
+            Debug.Log($"Game Over! Winner: {winner.NickName} (ActorNumber: {winner.ActorNumber})");
+            // Thông báo winner cho tất cả người chơi
+            photonView.RPC("RPC_AnnounceWinner", RpcTarget.All, winner.NickName);
             
             // Dừng game
             EndGame();
@@ -606,6 +803,10 @@ public class GameManager : MonoBehaviourPunCallbacks
             Debug.Log("Game Over! All players eliminated - Draw game");
             photonView.RPC("RPC_AnnounceWinner", RpcTarget.All, "Draw");
             EndGame();
+        }
+        else
+        {
+            Debug.Log($"Game continues with {alivePlayers} players remaining");
         }
     }
     
@@ -636,6 +837,34 @@ public class GameManager : MonoBehaviourPunCallbacks
             CardEffectManager.Instance.photonView.RPC("RPC_ShowWinner", RpcTarget.All, winnerName);
         }
     }
+    
+    [PunRPC]
+    private void RPC_EnableUIAfterElimination()
+    {
+        Debug.Log("[ELIMINATION] RPC_EnableUIAfterElimination - enabling UI for all players");
+        
+        // Reset exploding state cho tất cả clients
+        SetExplodingInProgress(false);
+        
+        // Enable player interactions
+        EnablePlayerInteractions();
+        
+        Debug.Log("[ELIMINATION] UI enabled for all players after elimination");
+    }
+    
+    [PunRPC]
+    private void RPC_EnableUIAfterDefuse()
+    {
+        Debug.Log("[DEFUSE] RPC_EnableUIAfterDefuse - enabling UI for all players");
+        
+        // Reset exploding state cho tất cả clients
+        SetExplodingInProgress(false);
+        
+        // Enable player interactions
+        EnablePlayerInteractions();
+        
+        Debug.Log("[DEFUSE] UI enabled for all players after successful defuse");
+    }
 
     // Phương thức để set trạng thái exploding
     public void SetExplodingInProgress(bool inProgress)
@@ -643,6 +872,28 @@ public class GameManager : MonoBehaviourPunCallbacks
         isExplodingInProgress = inProgress;
         // Đồng bộ với CardEffectManager để tránh desync
         CardEffectManager.IsExplodingInProgress = inProgress;
+    }
+    
+    // Phương thức để đồng bộ attackTurns cho tất cả clients
+    public void SyncAttackTurns(int newAttackTurns)
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            photonView.RPC("RPC_SyncAttackTurns", RpcTarget.All, newAttackTurns);
+        }
+    }
+    
+    [PunRPC]
+    private void RPC_SyncAttackTurns(int newAttackTurns)
+    {
+        attackTurns = newAttackTurns;
+        Debug.Log($"[SYNC] attackTurns synchronized to: {attackTurns}");
+    }
+    
+    // Public getter cho attackTurns
+    public int GetAttackTurns()
+    {
+        return attackTurns;
     }
 
     // Public method để test việc phát bài đặc biệt
@@ -681,7 +932,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         return count;
     }
 
-    // Phương thức để quay lại lượt của một người chơi cụ thể
+    // Thêm phương thức để quay lại lượt của một người chơi cụ thể
     public void ReturnTurnToPlayer(int playerId)
     {
         // Find the index of the player in playerList by ActorNumber
@@ -697,8 +948,28 @@ public class GameManager : MonoBehaviourPunCallbacks
         }
     }
     
+    // Method để reset CardHolder visibility cho tất cả players (useful cho game restart)
+    public void ResetAllCardHolders()
+    {
+        if (CardHolder.Instance != null)
+        {
+            CardHolder.Instance.SetCardHolderVisible(true);
+            CardHolder.Instance.SetEliminatedState(false);
+            Debug.Log("All CardHolders reset to visible state");
+        }
+    }
+    
     // Flag to prevent multiple simultaneous UI restoration calls
     private bool isRestoringUI = false;
+    
+    // Coroutine để delay enable player interactions
+    private IEnumerator DelayedEnablePlayerInteractions(float delay)
+    {
+        Debug.Log($"[DelayedEnablePlayerInteractions] Waiting {delay}s before enabling UI, current attackTurns: {attackTurns}");
+        yield return new WaitForSeconds(delay);
+        Debug.Log($"[DelayedEnablePlayerInteractions] About to enable UI, final attackTurns: {attackTurns}");
+        EnablePlayerInteractions();
+    }
     
     // Method to explicitly re-enable player interactions
     // Can be called after UI effects that might block interaction
@@ -714,11 +985,19 @@ public class GameManager : MonoBehaviourPunCallbacks
         isRestoringUI = true;
         Debug.Log("Explicitly enabling player interactions");
         
-        // Re-enable drawing cards if it's the player's turn AND no exploding is in progress
+        // Re-enable drawing cards if it's the player's turn AND no exploding is in progress AND attackTurns > 0
         bool isLocalTurn = IsLocalPlayerTurn();
         if (drawCardButtonComponent != null)
         {
-            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress && !CardEffectManager.IsExplodingInProgress;
+            // QUAN TRỌNG: Chỉ enable nút draw khi có lượt cần rút
+            bool shouldEnableDrawButton = isLocalTurn && 
+                                        !isExplodingInProgress && 
+                                        !CardEffectManager.IsExplodingInProgress &&
+                                        attackTurns > 0;
+            
+            drawCardButtonComponent.interactable = shouldEnableDrawButton;
+            
+            Debug.Log($"[EnablePlayerInteractions] Draw button state: isLocalTurn={isLocalTurn}, attackTurns={attackTurns}, shouldEnable={shouldEnableDrawButton}");
         }
         
         // IMPORTANT: Always enable card interactions for the local player
@@ -778,11 +1057,19 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("Enabling UI interactions only (keeping active dialogs open)");
         
-        // Re-enable drawing cards if it's the player's turn AND no exploding is in progress
+        // Re-enable drawing cards if it's the player's turn AND no exploding is in progress AND attackTurns > 0
         bool isLocalTurn = IsLocalPlayerTurn();
         if (drawCardButtonComponent != null)
         {
-            drawCardButtonComponent.interactable = isLocalTurn && !isExplodingInProgress && !CardEffectManager.IsExplodingInProgress;
+            // QUAN TRỌNG: Chỉ enable nút draw khi có lượt cần rút
+            bool shouldEnableDrawButton = isLocalTurn && 
+                                        !isExplodingInProgress && 
+                                        !CardEffectManager.IsExplodingInProgress &&
+                                        attackTurns > 0;
+            
+            drawCardButtonComponent.interactable = shouldEnableDrawButton;
+            
+            Debug.Log($"[EnableUIInteractionsOnly] Draw button state: isLocalTurn={isLocalTurn}, attackTurns={attackTurns}, shouldEnable={shouldEnableDrawButton}");
         }
         
         // If this is the local player's turn, make sure their cards are interactive
