@@ -322,33 +322,4 @@ public class ExplodingKittenUI : MonoBehaviour
             Debug.LogWarning("Cannot update placeholder - missing components!");
         }
     }
-    
-    // Debug method to check defuse card status
-    [ContextMenu("Debug Defuse Cards")]
-    public void DebugDefuseCards()
-    {
-        Debug.Log("=== DEFUSE CARD DEBUG ===");
-        
-        if (CardManager.Instance != null && CardManager.Instance.cardHolder != null)
-        {
-            int defuseCount = 0;
-            foreach (Card card in CardManager.Instance.cardHolder.Cards)
-            {
-                if (card.data.effect == "Defuse")
-                {
-                    defuseCount++;
-                    Debug.Log($"Defuse card found: {card.data.cardName}, IsPlayed: {card.isPlayed}");
-                }
-            }
-            
-            Debug.Log($"Total defuse cards in hand: {defuseCount}");
-            Debug.Log($"Total cards in hand: {CardManager.Instance.cardHolder.Cards.Count}");
-        }
-        else
-        {
-            Debug.LogError("CardManager or CardHolder is null!");
-        }
-        
-        Debug.Log("========================");
-    }
 }

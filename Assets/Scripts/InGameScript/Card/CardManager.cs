@@ -941,32 +941,4 @@ public class CardManager : MonoBehaviour
             Debug.Log($"[ForceSyncDeckCount] Client - Current synchronized count: {synchronizedDeckCount}");
         }
     }
-
-    // Debug method để kiểm tra trạng thái đồng bộ deck count
-    [ContextMenu("Debug Deck Count Sync")]
-    public void DebugDeckCountSync()
-    {
-        Debug.Log("=== DECK COUNT SYNC DEBUG ===");
-        Debug.Log($"Is Master Client: {PhotonNetwork.IsMasterClient}");
-        
-        if (PhotonNetwork.IsMasterClient)
-        {
-            Debug.Log($"Actual Deck Count: {Deck.Count}");
-            Debug.Log($"Synchronized Count: {synchronizedDeckCount}");
-            Debug.Log($"Counts Match: {Deck.Count == synchronizedDeckCount}");
-            
-            if (Deck.Count != synchronizedDeckCount)
-            {
-                Debug.LogWarning("MISMATCH DETECTED! Consider calling ForceSyncDeckCount");
-            }
-        }
-        else
-        {
-            Debug.Log($"Client - Synchronized Count: {synchronizedDeckCount}");
-            Debug.Log("Note: Clients don't have access to actual deck data");
-        }
-        
-        Debug.Log($"UI Display Count: {deckCardCount?.text ?? "NULL"}");
-        Debug.Log("==============================");
-    }
 }

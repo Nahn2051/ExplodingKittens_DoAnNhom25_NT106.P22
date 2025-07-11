@@ -820,37 +820,4 @@ public class GameManager : MonoBehaviourPunCallbacks
         
         Debug.Log($"Force enabled {allCanvases.Length} canvases and {allButtons.Length} buttons");
     }
-
-    // Debug method to check current UI state
-    [ContextMenu("Debug UI State")]
-    public void DebugUIState()
-    {
-        Debug.Log("=== UI STATE DEBUG ===");
-        Debug.Log($"Is Local Player Turn: {IsLocalPlayerTurn()}");
-        Debug.Log($"Current Turn Index: {currentTurnIndex}");
-        Debug.Log($"Local Player Index: {localPlayerIndex}");
-        Debug.Log($"Is Exploding In Progress: {isExplodingInProgress}");
-        Debug.Log($"Is Restoring UI: {isRestoringUI}");
-        
-        if (drawCardButtonComponent != null)
-        {
-            Debug.Log($"Draw Card Button Interactable: {drawCardButtonComponent.interactable}");
-        }
-        else
-        {
-            Debug.Log("Draw Card Button Component: NULL");
-        }
-        
-        if (CardHolder.Instance != null)
-        {
-            Debug.Log($"CardHolder Instance Available: True");
-            Debug.Log($"Number of cards in hand: {CardHolder.Instance.Cards.Count}");
-        }
-        else
-        {
-            Debug.Log("CardHolder Instance: NULL");
-        }
-        
-        Debug.Log("======================");
-    }
 }

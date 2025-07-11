@@ -67,45 +67,4 @@ public class DefuseZone : MonoBehaviour, IDropHandler
             Destroy(cardObject);
         }
     }
-
-    // Debug method để kiểm tra trạng thái defuse card trong hand
-    [ContextMenu("Debug Defuse Cards")]
-    public void DebugDefuseCards()
-    {
-        Debug.Log("=== DEFUSE CARDS DEBUG ===");
-        
-        if (CardManager.Instance?.cardHolder != null)
-        {
-            var cards = CardManager.Instance.cardHolder.Cards;
-            int defuseCount = 0;
-            
-            Debug.Log($"Total cards in hand: {cards.Count}");
-            
-            foreach (var card in cards)
-            {
-                if (card.data.effect == "Defuse")
-                {
-                    defuseCount++;
-                    Debug.Log($"Defuse card found: {card.data.cardName}, IsPlayed: {card.isPlayed}");
-                }
-            }
-            
-            Debug.Log($"Total Defuse cards in hand: {defuseCount}");
-            
-            // Cross-check với CardManager method
-            int managerDefuseCount = CardManager.Instance.GetDefuseCardCount();
-            Debug.Log($"CardManager.GetDefuseCardCount(): {managerDefuseCount}");
-            
-            if (defuseCount != managerDefuseCount)
-            {
-                Debug.LogWarning("Mismatch between actual count and CardManager count!");
-            }
-        }
-        else
-        {
-            Debug.LogError("CardManager or CardHolder is null!");
-        }
-        
-        Debug.Log("==========================");
-    }
 }
