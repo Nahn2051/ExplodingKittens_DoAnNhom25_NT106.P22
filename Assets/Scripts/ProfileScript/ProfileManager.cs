@@ -1,14 +1,11 @@
-﻿using Firebase;
-using Firebase.Auth;
-using Firebase.Database;
-using Firebase.Extensions;
-using System.Collections;
-using System.Collections.Generic;
-using TMPro;
+﻿using System.Collections;
 using UnityEngine;
-using UnityEngine.Audio;
-using UnityEngine.SceneManagement;
+using TMPro;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
+using UnityEngine.Audio;
+using Firebase;
+using Firebase.Auth;
 
 public class ProfileManager : MonoBehaviour
 {
@@ -53,8 +50,6 @@ public class ProfileManager : MonoBehaviour
 
             if (PlayerData.Instance != null)
                 PlayerData.Instance.UserId = firebaseUserId;
-
-            LoadDataFromFirebase(firebaseUserId);
         }
         else
         {
@@ -64,32 +59,24 @@ public class ProfileManager : MonoBehaviour
 
     public void OnSaveButtonClick()
     {
+        // 1. Lưu thông tin tên và avatar
         string playerName = nameInput.text;
         int avatarIndex = PlayerData.Instance != null ? PlayerData.Instance.AvatarIndex : 0;
 
-        // Lưu local
         PlayerPrefs.SetString("PlayerName", playerName);
         PlayerPrefs.SetInt("AvatarIndex", avatarIndex);
         PlayerPrefs.Save();
 
-        // Lưu Firebase
-        string uid = FirebaseAuth.DefaultInstance.CurrentUser?.UserId;
-        if (!string.IsNullOrEmpty(uid))
-        {
-            DatabaseReference db = FirebaseDatabase.DefaultInstance.RootReference;
-            db.Child("users").Child(uid).Child("name").SetValueAsync(playerName);
-            db.Child("users").Child(uid).Child("avatar").SetValueAsync(avatarIndex);
-        }
-
+        // Đồng bộ với PlayerData singleton (nếu có)
         if (PlayerData.Instance != null)
         {
             PlayerData.Instance.PlayerName = playerName;
             PlayerData.Instance.AvatarIndex = avatarIndex;
         }
 
+        // 2. Hiện thông báo
         ShowSaveMessage("Save successfully!");
     }
-
     public void LoadMainMenu()
     {
         SceneManager.LoadScene("Main Menu");
@@ -151,37 +138,5 @@ public class ProfileManager : MonoBehaviour
         {
             uidText.text = "UID: " + PlayerData.Instance.UserId;
         }
-    }
-    private void LoadDataFromFirebase(string uid)
-    {
-        FirebaseDatabase.DefaultInstance
-            .GetReference("users").Child(uid)
-            .GetValueAsync()
-            .ContinueWithOnMainThread(task =>
-            {
-                if (task.IsCompleted && task.Result.Exists)
-                {
-                    DataSnapshot snapshot = task.Result;
-
-                    string playerName = snapshot.Child("name").Value?.ToString();
-                    int avatarIndex = int.TryParse(snapshot.Child("avatar").Value?.ToString(), out var idx) ? idx : 0;
-
-                    Debug.Log($"✅ Tải dữ liệu từ Firebase: name = {playerName}, avatar = {avatarIndex}");
-
-                    if (PlayerData.Instance != null)
-                    {
-                        PlayerData.Instance.PlayerName = playerName;
-                        PlayerData.Instance.AvatarIndex = avatarIndex;
-                    }
-
-                    // Cập nhật UI
-                    nameInput.text = playerName;
-                    SetAvatarImage(avatarIndex);
-                }
-                else
-                {
-                    Debug.LogWarning("❌ Không tìm thấy dữ liệu user trong Firebase.");
-                }
-            });
     }
 }
