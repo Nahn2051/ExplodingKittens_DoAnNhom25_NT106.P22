@@ -27,6 +27,7 @@ public class CardManager : MonoBehaviour
         {3, 4, 6, 7},  // DEFUSE
         {3, 4, 5, 6},  // ATTACK (2X)
         {1, 2, 4, 6},  // FAVOR
+        {2, 3, 4, 5},  // NOPE
         {2, 3, 4, 5},  // SHUFFLE
         {3, 3, 4, 6},  // SKIP
         {3, 4, 4, 5},  // SEE THE FUTURE (3X)
@@ -38,7 +39,7 @@ public class CardManager : MonoBehaviour
     };
     
     // Sprite indices for each card type - base indices
-    private int[] cardSpriteIndices = {0, 4, 10, 14, 23, 27, 31, 36, 37, 38, 39, 40};
+    private int[] cardSpriteIndices = {0, 4, 10, 14, 18, 23, 27, 31, 36, 37, 38, 39, 40};
     
     // Sprite ranges for each card type [start, end] - for cards that need different sprites
     private int[,] cardSpriteRanges = {
@@ -46,6 +47,7 @@ public class CardManager : MonoBehaviour
         {4, 9},   // DEFUSE (4-9)
         {10, 13}, // ATTACK (10-13)
         {14, 17}, // FAVOR (14-17)
+        {18, 22}, // NOPE (18-22)
         {23, 26}, // SHUFFLE (23-26)
         {27, 30}, // SKIP (27-30)
         {31, 35}, // SEE THE FUTURE (31-35)
@@ -104,7 +106,7 @@ public class CardManager : MonoBehaviour
         
         // Card names corresponding to each row in the table
         string[] cardNames = {
-            "Exploding", "Defuse", "Attack", "Favor",
+            "Exploding", "Defuse", "Attack", "Favor", "Nope",
             "Shuffle", "Skip", "SeeTheFuture", "HairyPotatoCat", 
             "BeardCat", "Cattermelon", "Tacocat", "RainbowRalphingCat"
         };
@@ -698,7 +700,7 @@ public class CardManager : MonoBehaviour
     public void LogSpriteMapping()
     {
         string[] cardNames = {
-            "Exploding", "Defuse", "Attack", "Favor",
+            "Exploding", "Defuse", "Attack", "Favor", "Nope",
             "Shuffle", "Skip", "SeeTheFuture", "HairyPotatoCat", 
             "BeardCat", "Cattermelon", "Tacocat", "RainbowRalphingCat"
         };
