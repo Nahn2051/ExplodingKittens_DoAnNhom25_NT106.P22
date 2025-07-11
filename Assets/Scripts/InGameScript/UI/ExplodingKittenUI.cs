@@ -5,10 +5,10 @@ using TMPro;
 using Photon.Pun;
 using System;
 
-public class ExplodingKittenUI : MonoBehaviour
+public class ExplodingKittenUI : MonoBehaviourPun
 {
     [Header("Exploding Kitten UI")]
-    [SerializeField] private GameObject explodingKittenPanel;
+    [SerializeField] private GameObject explodingKittenPanel; 
     [SerializeField] private Image explodingKittenCardImage;
     [SerializeField] private GameObject defuseZone;
     [SerializeField] private TMP_Text countdownText;
@@ -19,18 +19,16 @@ public class ExplodingKittenUI : MonoBehaviour
     private bool hasDefuseInZone = false;
     private Coroutine countdownCoroutine;
     
-    // Events
+    // Events để thông báo cho CardEffectManager
     public event Action<int> OnDefuseConfirmed;
     public event Action OnPlayerEliminated;
     public event Action<Card> OnDefuseCardDropped;
     
     private void Start()
     {
-        // Ẩn UI panels ban đầu
         if (explodingKittenPanel != null) explodingKittenPanel.SetActive(false);
         if (positionInputPanel != null) positionInputPanel.SetActive(false);
         
-        // Thiết lập button events
         if (confirmPositionButton != null)
             confirmPositionButton.onClick.AddListener(OnConfirmPositionClicked);
     }
@@ -39,10 +37,18 @@ public class ExplodingKittenUI : MonoBehaviour
     {
         Debug.Log("Starting exploding kitten sequence!");
         
-        // Reset trạng thái trước khi bắt đầu
+        // Đồng bộ hóa UI với tất cả người chơi qua RPC
+        // Chỉ người chơi hiện tại (bị exploding) mới thấy defuse zone
+        photonView.RPC("SyncStartExplodingSequence", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber);
+    }
+    
+    [PunRPC]
+    private void SyncStartExplodingSequence(int explodingPlayerActorNumber)
+    {
+        Debug.Log("Syncing exploding kitten sequence for all players!");
+        
         hasDefuseInZone = false;
         
-        // Dừng mọi countdown đang chạy trước đó
         if (countdownCoroutine != null)
         {
             StopCoroutine(countdownCoroutine);
@@ -50,22 +56,19 @@ public class ExplodingKittenUI : MonoBehaviour
             Debug.Log("Stopped previous countdown before starting new sequence");
         }
         
-        // Hiển thị panel exploding kitten
         if (explodingKittenPanel != null)
         {
             explodingKittenPanel.SetActive(true);
-            Debug.Log("Exploding kitten panel activated");
+            Debug.Log("Exploding kitten panel activated for all players");
             
-            // Hiển thị hình ảnh lá bài exploding
             if (explodingKittenCardImage != null && CardManager.Instance != null)
             {
-                // Tìm sprite của exploding kitten trong CardManager
                 for (int i = 0; i < CardManager.Instance.allCardSprites.Length; i++)
                 {
                     if (CardManager.Instance.allCardSprites[i].name.Contains("Exploding"))
                     {
                         explodingKittenCardImage.sprite = CardManager.Instance.allCardSprites[i];
-                        Debug.Log("Exploding card image set");
+                        Debug.Log("Exploding card image set for all players");
                         break;
                     }
                 }
@@ -76,20 +79,28 @@ public class ExplodingKittenUI : MonoBehaviour
             Debug.LogError("explodingKittenPanel is null!");
         }
         
-        // Hiển thị defuse zone
+        // Chỉ hiển thị defuse zone cho người chơi bị exploding
         if (defuseZone != null)
         {
-            defuseZone.SetActive(true);
-            Debug.Log("Defuse zone activated");
+            bool isExplodingPlayer = PhotonNetwork.LocalPlayer.ActorNumber == explodingPlayerActorNumber;
+            defuseZone.SetActive(isExplodingPlayer);
+            
+            if (isExplodingPlayer)
+            {
+                Debug.Log("Defuse zone activated for exploding player");
+            }
+            else
+            {
+                Debug.Log("Defuse zone hidden for non-exploding player");
+            }
         }
         else
         {
             Debug.LogError("defuseZone is null!");
         }
         
-        // Bắt đầu countdown 10 giây
         countdownCoroutine = StartCoroutine(CountdownTimer(10f));
-        Debug.Log("Started new 10-second countdown");
+        Debug.Log("Started new 10-second countdown for all players");
     }
     
     private IEnumerator CountdownTimer(float duration)
@@ -98,47 +109,40 @@ public class ExplodingKittenUI : MonoBehaviour
         
         while (timeRemaining > 0)
         {
-            // Check if defuse was used during countdown
+            // Kiểm tra xem có defuse được sử dụng không
             if (hasDefuseInZone)
             {
                 Debug.Log("Defuse detected during countdown, stopping timer");
-                yield break; // Exit countdown if defuse was used
+                yield break;
             }
             
-            if (countdownText != null)
-                countdownText.text = $"{timeRemaining:F1}s";
+            // Đồng bộ countdown với tất cả client
+            photonView.RPC("SyncCountdownText", RpcTarget.All, timeRemaining);
                 
             yield return new WaitForSeconds(0.1f);
             timeRemaining -= 0.1f;
         }
         
-        // Kiểm tra lại hasDefuseInZone trước khi eliminate - đây là double check cuối cùng
         if (hasDefuseInZone)
         {
             Debug.Log("[ExplodingKittenUI] Defuse was used during final check, player survives");
             yield break;
         }
         
-        // Hết thời gian
-        if (countdownText != null)
-            countdownText.text = "0s";
+        photonView.RPC("SyncCountdownText", RpcTarget.All, 0f);
             
         Debug.Log($"[ExplodingKittenUI] Countdown finished. hasDefuseInZone: {hasDefuseInZone}");
         
-        // Kiểm tra có defuse không - chỉ eliminate nếu thực sự không có defuse
         if (!hasDefuseInZone)
         {
-            // Không có defuse -> player bị loại
             Debug.Log("[ExplodingKittenUI] No defuse provided, eliminating player");
             
-            // Hide the exploding panel first
-            if (explodingKittenPanel != null)
-                explodingKittenPanel.SetActive(false);
+            // Ẩn panel và loại bỏ player
+            photonView.RPC("SyncHideExplodingPanel", RpcTarget.All);
             
-            // Trigger elimination
             OnPlayerEliminated?.Invoke();
             
-            // Start a backup elimination timer in case the primary elimination fails
+            // Backup elimination nếu cần
             StartCoroutine(BackupEliminationCheck());
         }
         else
@@ -147,12 +151,33 @@ public class ExplodingKittenUI : MonoBehaviour
         }
     }
     
+    [PunRPC]
+    private void SyncCountdownText(float timeRemaining)
+    {
+        if (countdownText != null)
+        {
+            if (timeRemaining > 0)
+                countdownText.text = $"{timeRemaining:F1}s";
+            else
+                countdownText.text = "0s";
+        }
+    }
+    
+    [PunRPC]
+    private void SyncHideExplodingPanel()
+    {
+        if (explodingKittenPanel != null)
+            explodingKittenPanel.SetActive(false);
+            
+        // Ẩn defuse zone khi panel bị ẩn
+        if (defuseZone != null)
+            defuseZone.SetActive(false);
+    }
+    
     private IEnumerator BackupEliminationCheck()
     {
-        // Wait 2 seconds to see if elimination was processed
         yield return new WaitForSeconds(2f);
         
-        // If we're still in exploding state, force elimination again
         if (CardEffectManager.IsExplodingInProgress)
         {
             Debug.LogWarning("[ExplodingKittenUI] Backup elimination check: Still in exploding state, forcing elimination again");
@@ -162,32 +187,20 @@ public class ExplodingKittenUI : MonoBehaviour
     
     public void HandleDefuseCardDropped(Card defuseCard)
     {
-        // Kiểm tra nếu card được thả vào defuse zone
         if (defuseCard.data.effect == "Defuse")
         {
             Debug.Log($"[ExplodingKittenUI] Defuse card {defuseCard.data.cardName} dropped in zone");
             
-            // Đặt hasDefuseInZone TRƯỚC KHI dừng countdown để tránh race condition
-            hasDefuseInZone = true;
+            // Đồng bộ việc sử dụng defuse với tất cả client
+            photonView.RPC("SyncDefuseSuccess", RpcTarget.All);
             
-            // Dừng countdown ngay lập tức
-            if (countdownCoroutine != null)
-            {
-                StopCoroutine(countdownCoroutine);
-                countdownCoroutine = null;
-                Debug.Log("[ExplodingKittenUI] Countdown stopped - defuse successful");
-            }
-            
-            // Double-check để đảm bảo card được xóa khỏi CardHolder (fallback protection)
             if (CardManager.Instance != null && CardManager.Instance.cardHolder != null)
             {
-                // Kiểm tra xem card có còn trong CardHolder không
                 if (CardManager.Instance.cardHolder.Cards.Contains(defuseCard))
                 {
                     Debug.Log("[ExplodingKittenUI] Fallback: Removing defuse card from CardHolder");
                     CardManager.Instance.cardHolder.RemoveCard(defuseCard);
                     
-                    // Cập nhật số lượng card
                     if (GameManager.Instance != null)
                     {
                         GameManager.Instance.UpdatePlayerCardCount();
@@ -199,21 +212,35 @@ public class ExplodingKittenUI : MonoBehaviour
                 }
             }
             
-            // Ẩn exploding panel
-            if (explodingKittenPanel != null)
-                explodingKittenPanel.SetActive(false);
-                
-            // Hiển thị input để chọn vị trí đặt lại exploding card
             if (positionInputPanel != null)
             {
                 positionInputPanel.SetActive(true);
                 
-                // Cập nhật placeholder text để hiển thị range hợp lệ
                 UpdatePlaceholderText();
             }
                 
             OnDefuseCardDropped?.Invoke(defuseCard);
         }
+    }
+    
+    [PunRPC]
+    private void SyncDefuseSuccess()
+    {
+        hasDefuseInZone = true;
+        
+        if (countdownCoroutine != null)
+        {
+            StopCoroutine(countdownCoroutine);
+            countdownCoroutine = null;
+            Debug.Log("[ExplodingKittenUI] Countdown stopped - defuse successful for all players");
+        }
+        
+        if (explodingKittenPanel != null)
+            explodingKittenPanel.SetActive(false);
+            
+        // Ẩn defuse zone cho tất cả người chơi khi defuse thành công
+        if (defuseZone != null)
+            defuseZone.SetActive(false);
     }
     
     private void OnConfirmPositionClicked()
@@ -223,14 +250,11 @@ public class ExplodingKittenUI : MonoBehaviour
             string input = positionInputField.text;
             if (int.TryParse(input, out int position))
             {
-                // Kiểm tra vị trí hợp lệ
                 int deckCount = CardManager.Instance.GetDeckCount();
                 if (position >= 1 && position <= deckCount + 1)
                 {
-                    // Ẩn position input panel
                     positionInputPanel.SetActive(false);
                     
-                    // Gọi event để CardEffectManager xử lý
                     OnDefuseConfirmed?.Invoke(position - 1);
                 }
                 else
@@ -247,7 +271,13 @@ public class ExplodingKittenUI : MonoBehaviour
     
     public void HideExplodingPanel()
     {
-        // Dừng countdown nếu đang chạy
+        // Đồng bộ hóa việc ẩn panel cho tất cả người chơi
+        photonView.RPC("SyncHideExplodingPanelWithCountdown", RpcTarget.All);
+    }
+    
+    [PunRPC]
+    private void SyncHideExplodingPanelWithCountdown()
+    {
         if (countdownCoroutine != null)
         {
             StopCoroutine(countdownCoroutine);
@@ -257,6 +287,27 @@ public class ExplodingKittenUI : MonoBehaviour
         
         if (explodingKittenPanel != null)
             explodingKittenPanel.SetActive(false);
+            
+        // Ẩn defuse zone khi panel bị ẩn
+        if (defuseZone != null)
+            defuseZone.SetActive(false);
+    }
+    
+    [PunRPC]
+    private void SyncExplodingCardImage(string spriteName)
+    {
+        if (explodingKittenCardImage != null && CardManager.Instance != null)
+        {
+            for (int i = 0; i < CardManager.Instance.allCardSprites.Length; i++)
+            {
+                if (CardManager.Instance.allCardSprites[i].name == spriteName)
+                {
+                    explodingKittenCardImage.sprite = CardManager.Instance.allCardSprites[i];
+                    Debug.Log($"Synced exploding card image: {spriteName} for all players");
+                    break;
+                }
+            }
+        }
     }
     
     public void HidePositionInputPanel()
@@ -265,7 +316,6 @@ public class ExplodingKittenUI : MonoBehaviour
         {
             positionInputPanel.SetActive(false);
             
-            // Clear input field khi ẩn panel
             if (positionInputField != null)
             {
                 positionInputField.text = "";
@@ -273,27 +323,23 @@ public class ExplodingKittenUI : MonoBehaviour
         }
     }
     
-    // Force elimination method for when automatic elimination fails
     public void ForcePlayerElimination()
     {
         Debug.Log("Force eliminating player due to exploding without defuse");
         OnPlayerEliminated?.Invoke();
     }
     
-    // Method to check if countdown is running
     public bool IsCountdownActive()
     {
         return countdownCoroutine != null;
     }
     
-    // Method to manually trigger elimination for testing
     public void TestElimination()
     {
         Debug.Log("Test elimination triggered");
         OnPlayerEliminated?.Invoke();
     }
     
-    // Update placeholder text with current valid range
     private void UpdatePlaceholderText()
     {
         if (positionInputField != null && positionInputField.placeholder != null && CardManager.Instance != null)

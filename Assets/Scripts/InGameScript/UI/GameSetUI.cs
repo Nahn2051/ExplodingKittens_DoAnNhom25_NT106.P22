@@ -17,16 +17,14 @@ public class GameSetUI : MonoBehaviourPunCallbacks
     [SerializeField] private GameObject loserBackground;
     [SerializeField] private CanvasGroup gameOverCanvasGroup;
     
-    // Events
+    // Events để thông báo cho GameManager
     public System.Action OnRestartGame;
     public System.Action OnReturnToMainMenu;
     
     private void Start()
     {
-        // Ẩn UI ban đầu
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
         
-        // Thiết lập button events
         if (restartButton != null)
             restartButton.onClick.AddListener(OnRestartClicked);
         if (mainMenuButton != null)
@@ -43,7 +41,7 @@ public class GameSetUI : MonoBehaviourPunCallbacks
             Debug.Log("[GameSetUI] Game over panel activated");
         }
         
-        // Thiết lập text với debug logging
+        // Hiển thị text chiến thắng hoặc thua cuộc
         if (gameOverText != null)
         {
             string displayText = isLocalPlayerWinner ? "Victory!" : "Game Over";
@@ -58,7 +56,7 @@ public class GameSetUI : MonoBehaviourPunCallbacks
             Debug.Log($"[GameSetUI] Winner name text set to: {winnerDisplayText}");
         }
         
-        // Hiển thị background phù hợp với debug logging
+        // Hiển thị background tương ứng với kết quả
         bool showWinnerBg = isLocalPlayerWinner;
         bool showLoserBg = !isLocalPlayerWinner;
         
@@ -74,7 +72,6 @@ public class GameSetUI : MonoBehaviourPunCallbacks
             Debug.Log($"[GameSetUI] Loser background set to: {showLoserBg}");
         }
         
-        // Phát hiệu ứng
         if (isLocalPlayerWinner)
         {
             PlayWinnerEffects();
@@ -84,7 +81,6 @@ public class GameSetUI : MonoBehaviourPunCallbacks
             PlayLoserEffects();
         }
         
-        // Animation fade in
         StartCoroutine(FadeInGameOverPanel());
         
         Debug.Log("[GameSetUI] ShowGameOver setup completed");
@@ -92,13 +88,11 @@ public class GameSetUI : MonoBehaviourPunCallbacks
     
     private void PlayWinnerEffects()
     {
-        // Có thể thêm hiệu ứng khác nếu cần
         Debug.Log("Winner effects played!");
     }
     
     private void PlayLoserEffects()
     {
-        // Có thể thêm hiệu ứng khác nếu cần
         Debug.Log("Loser effects played!");
     }
     
@@ -124,10 +118,9 @@ public class GameSetUI : MonoBehaviourPunCallbacks
     
     private void OnRestartClicked()
     {
-        // Chỉ Master Client mới có thể restart game
+        // Chỉ Master Client mới có quyền restart game
         if (PhotonNetwork.IsMasterClient)
         {
-            // Trigger event cho GameManager
             OnRestartGame?.Invoke();
         }
         else
@@ -135,16 +128,13 @@ public class GameSetUI : MonoBehaviourPunCallbacks
             Debug.Log("Only room master can restart the game!");
         }
         
-        // Ẩn UI
         HideGameOverPanel();
     }
     
     private void OnMainMenuClicked()
     {
-        // Trigger event cho GameManager
         OnReturnToMainMenu?.Invoke();
         
-        // Ẩn UI
         HideGameOverPanel();
     }
     
@@ -158,7 +148,6 @@ public class GameSetUI : MonoBehaviourPunCallbacks
     
     public void ShowPlayerEliminated(string playerName, bool isLocalPlayer)
     {
-        // Có thể thêm UI hiển thị khi player bị loại (không phải game over hoàn toàn)
         if (isLocalPlayer)
         {
             Debug.Log("You have been eliminated!");

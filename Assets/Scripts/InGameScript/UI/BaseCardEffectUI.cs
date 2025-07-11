@@ -20,14 +20,11 @@ public abstract class BaseCardEffectUI : MonoBehaviour
     
     protected virtual void Start()
     {
-        // Ẩn UI ban đầu
         if (mainPanel != null) mainPanel.SetActive(false);
         
-        // Thiết lập cancel button
         if (cancelButton != null)
             cancelButton.onClick.AddListener(OnCancelClicked);
             
-        // Thiết lập canvas group
         if (canvasGroup != null)
             canvasGroup.alpha = 0f;
     }
@@ -42,7 +39,6 @@ public abstract class BaseCardEffectUI : MonoBehaviour
         if (mainPanel != null)
             mainPanel.SetActive(true);
             
-        // Animation show
         if (panelAnimator != null)
         {
             panelAnimator.SetTrigger("Show");
@@ -57,11 +53,9 @@ public abstract class BaseCardEffectUI : MonoBehaviour
     
     public virtual void HideUI()
     {
-        // Animation hide
         if (panelAnimator != null)
         {
             panelAnimator.SetTrigger("Hide");
-            // Giả định animation sẽ gọi HideUIComplete() khi hoàn thành
         }
         else
         {
@@ -128,11 +122,10 @@ public abstract class BaseCardEffectUI : MonoBehaviour
             descriptionText.text = description;
     }
     
-    // Abstract methods để override
+    // Override methods cho các UI kế thừa
     protected virtual void OnUIShown() { }
     protected virtual void OnUIHidden() { }
     
-    // Utility methods
     protected void ClearContainer(Transform container)
     {
         if (container != null)

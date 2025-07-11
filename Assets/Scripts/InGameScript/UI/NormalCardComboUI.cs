@@ -16,18 +16,17 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
     [SerializeField] private Button cardButtonPrefab;
     [SerializeField] private TMP_Text comboDescriptionText;
     
-    // Biến cho Normal Card Combo
+    // Biến lưu trữ combo đang xử lý
     private List<Card> pendingComboCards = new List<Card>();
     private int selectedTargetPlayer = -1;
     private string selectedCardType = "";
     
-    // Events
+    // Events để thông báo cho CardEffectManager
     public System.Action<int, int> OnTwoCardComboExecuted;
     public System.Action<int, int, string> OnThreeCardComboExecuted;
     
     private void Start()
     {
-        // Ẩn tất cả UI panels ban đầu
         if (playerSelectionPanel != null) 
         {
             playerSelectionPanel.SetActive(false);
@@ -39,7 +38,6 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
             Debug.Log("NormalCardComboUI: cardSelectionPanel disabled");
         }
         
-        // Đảm bảo text component không tự động resize
         if (comboDescriptionText != null)
         {
             comboDescriptionText.enableAutoSizing = false;
@@ -47,18 +45,15 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         }
     }
     
-    // Method to show helpful message when player tries to play normal card individually
     public void ShowComboHelpMessage()
     {
         if (comboDescriptionText != null)
         {
             comboDescriptionText.text = "Normal cards must be played in combos! Click 2-3 cards of the same type to select them for combo.";
-            // Show message for a few seconds then hide
             StartCoroutine(HideHelpMessageAfterDelay(5f));
         }
     }
     
-    // Method to show current combo selection status
     public void ShowComboSelectionStatus(int selectedCount, string cardType)
     {
         if (comboDescriptionText != null)
@@ -91,7 +86,6 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         }
     }
     
-    // Public method để xử lý combo normal cards
     public void HandleNormalCardCombo(List<Card> comboCards)
     {
         Debug.Log($"NormalCardComboUI.HandleNormalCardCombo: Received combo with {comboCards.Count} cards");
@@ -102,7 +96,7 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
             return;
         }
         
-        // Kiểm tra tất cả các lá bài có cùng loại không
+        // Kiểm tra tất cả cards cùng loại
         string cardType = comboCards[0].data.effect;
         Debug.Log($"NormalCardComboUI: Checking combo of type {cardType}");
         
@@ -115,28 +109,24 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
             }
         }
         
-        // Kiểm tra có phải normal card không
         if (!IsNormalCard(cardType))
         {
             Debug.LogWarning($"Only Normal cards can create combos! {cardType} is not a normal card");
             return;
         }
         
-        // Lưu combo để xử lý
         pendingComboCards = new List<Card>(comboCards);
         Debug.Log($"NormalCardComboUI: Stored {pendingComboCards.Count} cards for {cardType} combo");
         
         if (comboCards.Count == 2)
         {
-            // Combo 2 lá: không cần delay vì không còn Nope
             Debug.Log($"NormalCardComboUI: Starting 2-card combo process for {cardType}");
-            StartTwoCardCombo(cardType); // Thực hiện ngay lập tức
+            StartTwoCardCombo(cardType);
         }
         else if (comboCards.Count == 3)
         {
-            // Combo 3 lá: không cần delay vì không còn Nope
             Debug.Log($"NormalCardComboUI: Starting 3-card combo process for {cardType}");
-            StartThreeCardCombo(cardType); // Thực hiện ngay lập tức
+            StartThreeCardCombo(cardType);
         }
     }
     
@@ -145,8 +135,7 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         Debug.Log($"NormalCardComboUI: Starting 2-card combo delay ({delay}s) for {cardType}");
         yield return new WaitForSeconds(delay);
         
-        // Kiểm tra xem combo có bị Nope không
-        if (pendingComboCards.Count > 0) // Nếu combo chưa bị reset bởi Nope
+        if (pendingComboCards.Count > 0)
         {
             Debug.Log($"NormalCardComboUI: Delay completed, showing 2-card combo UI for {cardType}");
             StartTwoCardCombo(cardType);
@@ -162,8 +151,7 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         Debug.Log($"NormalCardComboUI: Starting 3-card combo delay ({delay}s) for {cardType}");
         yield return new WaitForSeconds(delay);
         
-        // Kiểm tra xem combo có bị Nope không
-        if (pendingComboCards.Count > 0) // Nếu combo chưa bị reset bởi Nope
+        if (pendingComboCards.Count > 0)
         {
             Debug.Log($"NormalCardComboUI: Delay completed, showing 3-card combo UI for {cardType}");
             StartThreeCardCombo(cardType);
@@ -186,7 +174,6 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         if (comboDescriptionText != null)
         {
             comboDescriptionText.text = $"2-Card Combo ({cardType}): Select a player to steal 1 random card";
-            // Đảm bảo text không bị tự động resize
             comboDescriptionText.enableAutoSizing = false;
         }
         
@@ -198,14 +185,12 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         if (comboDescriptionText != null)
         {
             comboDescriptionText.text = $"3-Card Combo ({cardType}): Select a player to steal a specific card";
-            // Đảm bảo text không bị tự động resize
             comboDescriptionText.enableAutoSizing = false;
         }
         
         ShowPlayerSelection();
     }
     
-    // Coroutine to ensure UI interactions are properly restored after combo setup
     private IEnumerator EnsureUIInteractionsAfterCombo()
     {
         yield return new WaitForSeconds(0.2f);
@@ -216,10 +201,9 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
             Debug.Log("NormalCardComboUI: Forced ALL UI interaction restoration after combo setup");
         }
         
-        // Additional wait and second attempt if needed
         yield return new WaitForSeconds(0.3f);
         
-        // Force enable all buttons in active panels again
+        // Force enable buttons trong active panels
         if (playerSelectionPanel != null && playerSelectionPanel.activeInHierarchy)
         {
             Button[] buttons = playerSelectionPanel.GetComponentsInChildren<Button>();
@@ -248,7 +232,7 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         if (playerSelectionPanel != null)
         {
             playerSelectionPanel.SetActive(true);
-            playerSelectionPanel.transform.SetAsLastSibling(); // Ensure panel is shown on top
+            playerSelectionPanel.transform.SetAsLastSibling();
             Debug.Log("NormalCardComboUI: playerSelectionPanel activated and brought to front");
         }
         else
@@ -256,14 +240,13 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
             Debug.LogWarning("NormalCardComboUI: playerSelectionPanel is null!");
         }
         
-        // Ensure UI interactions are enabled for the combo panel
+        // Enable UI interactions cho combo panel
         if (GameManager.Instance != null)
         {
             GameManager.Instance.EnableUIInteractionsOnly();
             Debug.Log("NormalCardComboUI: UI interactions enabled for player selection");
         }
         
-        // Xóa các button cũ
         foreach (Transform child in playerButtonContainer)
         {
             Destroy(child.gameObject);
@@ -279,7 +262,6 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
                 int playerId = player.ActorNumber;
                 playerBtn.onClick.AddListener(() => OnPlayerSelected(playerId));
                 
-                // Explicitly ensure the button is interactable
                 playerBtn.interactable = true;
                 Debug.Log($"NormalCardComboUI: Created interactable button for player {player.NickName}");
             }
@@ -287,14 +269,12 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         
         Debug.Log("NormalCardComboUI: Player selection setup completed with UI interactions enabled");
         
-        // Immediate UI force enable
         if (GameManager.Instance != null)
         {
             GameManager.Instance.ForceEnableAllUIInteractions();
             Debug.Log("NormalCardComboUI: Immediate force enable of all UI interactions");
         }
         
-        // Start coroutine to ensure UI interactions work properly
         StartCoroutine(EnsureUIInteractionsAfterCombo());
     }
     
@@ -305,13 +285,11 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         
         if (pendingComboCards.Count == 2)
         {
-            // Combo 2 lá: thực hiện ngay lập tức
             Debug.Log("NormalCardComboUI: Executing 2-card combo immediately");
             ExecuteTwoCardCombo();
         }
         else if (pendingComboCards.Count == 3)
         {
-            // Combo 3 lá: hiển thị menu chọn loại bài
             Debug.Log("NormalCardComboUI: Showing card type selection for 3-card combo");
             ShowCardTypeSelection();
         }
@@ -327,7 +305,7 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         if (cardSelectionPanel != null)
         {
             cardSelectionPanel.SetActive(true);
-            cardSelectionPanel.transform.SetAsLastSibling(); // Ensure panel is shown on top
+            cardSelectionPanel.transform.SetAsLastSibling();
             Debug.Log("NormalCardComboUI: cardSelectionPanel activated and brought to front");
         }
         else
@@ -335,20 +313,19 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
             Debug.LogWarning("NormalCardComboUI: cardSelectionPanel is null!");
         }
         
-        // Ensure UI interactions are enabled for the card selection panel
+        // Enable UI interactions cho card selection panel
         if (GameManager.Instance != null)
         {
             GameManager.Instance.EnableUIInteractionsOnly();
             Debug.Log("NormalCardComboUI: UI interactions enabled for card type selection");
         }
         
-        // Xóa các button cũ
         foreach (Transform child in cardButtonContainer)
         {
             Destroy(child.gameObject);
         }
         
-        // Danh sách các loại bài có thể chọn (đã loại bỏ Nope vì đã xóa khỏi game)
+        // Danh sách card types có thể chọn
         string[] cardTypes = {"Favor", "Shuffle", "Skip", "SeeTheFuture", "Defuse",
                               "HairyPotatoCat", "BeardCat", "Cattermelon", "Tacocat", "RainbowRalphingCat"};
         
@@ -356,17 +333,15 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         {
             Button cardBtn = Instantiate(cardButtonPrefab, cardButtonContainer);
             cardBtn.GetComponentInChildren<TMP_Text>().text = cardType;
-            string type = cardType; // Capture for lambda
+            string type = cardType;
             cardBtn.onClick.AddListener(() => OnCardTypeSelected(type));
             
-            // Explicitly ensure the button is interactable
             cardBtn.interactable = true;
             Debug.Log($"NormalCardComboUI: Created interactable card type button for {cardType}");
         }
         
         Debug.Log("NormalCardComboUI: Card type selection setup completed with UI interactions enabled");
         
-        // Start coroutine to ensure UI interactions work properly
         StartCoroutine(EnsureUIInteractionsAfterCombo());
     }
     
@@ -375,13 +350,11 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
         Debug.Log($"NormalCardComboUI.OnCardTypeSelected: Card type {cardType} selected for 3-card combo");
         selectedCardType = cardType;
         
-        // Automatically execute three card combo after selection
         ExecuteThreeCardCombo();
     }
     
     private void ResetComboUI()
     {
-        // Reset và ẩn UI
         pendingComboCards.Clear();
         selectedTargetPlayer = -1;
         selectedCardType = "";
@@ -396,13 +369,10 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
     {
         Debug.Log($"NormalCardComboUI.ExecuteTwoCardCombo: Executing 2-card combo for player {PhotonNetwork.LocalPlayer.ActorNumber} targeting player {selectedTargetPlayer}");
         
-        // Trigger event cho CardEffectManager
         OnTwoCardComboExecuted?.Invoke(PhotonNetwork.LocalPlayer.ActorNumber, selectedTargetPlayer);
         
-        // Reset UI
         ResetComboUI();
         
-        // Don't restore UI here - it will be done after the RPC completes
         Debug.Log("NormalCardComboUI: 2-card combo triggered, UI will be restored after RPC completion");
     }
     
@@ -410,25 +380,20 @@ public class NormalCardComboUI : MonoBehaviourPunCallbacks
     {
         Debug.Log($"NormalCardComboUI.ExecuteThreeCardCombo: Executing 3-card combo for player {PhotonNetwork.LocalPlayer.ActorNumber} targeting player {selectedTargetPlayer} for card type {selectedCardType}");
         
-        // Trigger event cho CardEffectManager
         OnThreeCardComboExecuted?.Invoke(PhotonNetwork.LocalPlayer.ActorNumber, selectedTargetPlayer, selectedCardType);
         
-        // Reset UI
         ResetComboUI();
         
-        // Don't restore UI here - it will be done after the RPC completes
         Debug.Log("NormalCardComboUI: 3-card combo triggered, UI will be restored after RPC completion");
     }
     
-    // Method to cancel pending combo (called when Nope is used)
     public void CancelPendingCombo()
     {
         Debug.Log("NormalCardComboUI: Pending combo cancelled by Nope");
-        StopAllCoroutines(); // Stop any delayed combo coroutines
+        StopAllCoroutines();
         ResetComboUI();
     }
     
-    // Method to check if there's a pending combo
     public bool HasPendingCombo()
     {
         return pendingComboCards.Count > 0;
