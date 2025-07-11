@@ -184,9 +184,30 @@ public class FirebaseLoginManager : MonoBehaviour
                     sessionRef.OnDisconnect().SetValue(false);
                     // Đặt trạng thái là true
                     sessionRef.SetValueAsync(true);
+                    dbReference.Child("users").Child(user.UserId).GetValueAsync().ContinueWithOnMainThread(task =>
+                    {
+                        if (task.IsCompleted && task.Result.Exists)
+                        {
+                            var data = task.Result;
+                            string name = data.Child("name").Value?.ToString();
+                            int avatar = int.Parse(data.Child("avatar").Value.ToString());
 
-                    // Chuyển đến màn hình Main Menu
-                    SceneManager.LoadScene("Main Menu");
+                            if (PlayerData.Instance != null)
+                            {
+                                PlayerData.Instance.PlayerName = name;
+                                PlayerData.Instance.AvatarIndex = avatar;
+                            }
+
+                            Debug.Log("🎉 Tải dữ liệu người dùng: " + name + ", avatar = " + avatar);
+                        }
+                        else
+                        {
+                            Debug.LogWarning("⚠️ Không có dữ liệu người dùng trên database!");
+                        }
+
+                        // Load Main Menu sau khi đã tải xong
+                        SceneManager.LoadScene("Main Menu");
+                    });
                 }
             });
         });
